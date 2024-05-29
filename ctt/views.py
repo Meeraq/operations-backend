@@ -25,7 +25,7 @@ from .models import (
     MentorCoachSessions,
     Users,
 )
-from zohoapi.models import SalesOrder, ClientInvoice
+from zohoapi.models import SalesOrder, ClientInvoice, PurchaseOrder
 from datetime import datetime, timedelta
 from decimal import Decimal
 from django.db.models import (
@@ -902,3 +902,67 @@ def get_all_ctt_faculties(request):
         return Response(faculties_data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_the_profitability_of_a_batch(request, batch_id):
+    try:
+        batch_user = Batches.objects.using("ctt").get(id=batch_id)
+        salesorders = SalesOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.name)
+        purchase_orders = PurchaseOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.name)
+        
+        total = Decimal('0.0')
+        invoiced_amount = Decimal('0.0')
+        paid_amount = Decimal('0.0')
+        currency_code = None
+        all_invoices_paid = []
+
+        if salesorders.exists():
+            for sales_order in salesorders:
+                total += Decimal(str(sales_order.total)) * sales_order.exchange_rate
+                currency_code = sales_order.currency_code
+                for invoice in sales_order.invoices:
+                    invoiced_amount += Decimal(str(invoice["total"])) * sales_order.exchange_rate
+                    if invoice["status"] == "paid":
+                        paid_amount += Decimal(str(invoice["total"]))
+                        all_invoices_paid.append(True)
+                    else:
+                        all_invoices_paid.append(False)
+
+        purchase_total = Decimal('0.0')
+        purchase_billed_amount = Decimal('0.0')
+        purchase_paid_amount = Decimal('0.0')
+        purchase_currency_code = None
+        purchase_all_bills_paid = []
+
+        if purchase_orders.exists():
+            for purchase_order in purchase_orders:
+                purchase_total += Decimal(str(purchase_order.total))* purchase_order.exchange_rate
+                purchase_currency_code = purchase_order.currency_code
+                for bill in purchase_order.bills:
+                    purchase_billed_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                    if bill["status"] == "paid":
+                        purchase_paid_amount += Decimal(str(bill["total"]))
+                        purchase_all_bills_paid.append(True)
+                    else:
+                        purchase_all_bills_paid.append(False)
+
+        response_data = {
+            "total_amount": total,
+            "invoiced_amount": invoiced_amount,
+            "paid_amount": paid_amount,
+            "purchase_total": purchase_total,
+            "purchase_billed_amount": purchase_billed_amount,
+            "purchase_paid_amount": purchase_paid_amount,
+            "currency_code": currency_code,
+            "purchase_currency_code": purchase_currency_code,
+            "all_invoices_paid": all_invoices_paid,
+            "purchase_all_bills_paid": purchase_all_bills_paid
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    except BatchUsers.DoesNotExist:
+        return Response({"error": "Batch user not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

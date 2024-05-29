@@ -151,6 +151,7 @@ from courses.models import (
     Lesson,
     Certificate,
     Answer,
+    Assessment as AssessmentLesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -184,17 +185,23 @@ from api.views import (
     delete_outlook_calendar_invite,
     create_teams_meeting,
     delete_teams_meeting,
+    create_learner,
 )
 from django.db.models import Max
 import io
 from time import sleep
-from assessmentApi.views import delete_participant_from_assessments
+from assessmentApi.views import (
+    delete_participant_from_assessments,
+    add_multiple_participants_for_project,
+  
+)
 from assessmentApi.serializers import (
     CompetencySerializerDepthOne,
     ActionItemSerializer,
     ActionItemDetailedSerializer,
     CompetencySerializer,
     BehaviorSerializer,
+    AssessmentSerializer,
 )
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
@@ -366,7 +373,8 @@ def create_project_schedular(request):
             whatsapp_reminder=project_details["whatsapp_reminder"],
             calendar_invites=project_details["calendar_invites"],
             nudges=project_details["nudges"],
-            pre_post_assessment=project_details["pre_post_assessment"],
+            pre_assessment=project_details["pre_assessment"],
+            post_assessment=project_details["post_assessment"],
             is_finance_enabled=project_details["finance"],
             teams_enabled=project_details["teams_enabled"],
             project_type=project_details["project_type"],
@@ -991,13 +999,15 @@ def update_status(request):
             "status": new_status,
             "assigned_to": asset.assigned_to,
         }
-        if not hasattr(asset, 'updates'):
+        if not hasattr(asset, "updates"):
             asset.updates = []  # Initialize if 'updates' field does not exist
         asset.updates.append(update_entry)
 
         asset.save()
         return Response({"success": "Status updated successfully"})
-    return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    return Response(
+        {"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
+    )
 
 
 @api_view(["GET"])
@@ -4738,66 +4748,253 @@ def delete_learner_from_course(request):
 @transaction.atomic
 def edit_schedular_project(request, project_id):
     try:
-        project = SchedularProject.objects.get(pk=project_id)
-    except SchedularProject.DoesNotExist:
+        with transaction.atomic():
+            project = SchedularProject.objects.get(pk=project_id)
+
+            prev_pre_assessment = project.pre_assessment
+            prev_post_assessment = project.post_assessment
+            project_details = request.data
+            junior_pmo = None
+            if "junior_pmo" in project_details:
+                junior_pmo = Pmo.objects.filter(
+                    id=project_details["junior_pmo"]
+                ).first()
+
+            project_name = project_details.get("project_name")
+            organisation_id = project_details.get("organisation_id")
+            hr_ids = project_details.get("hr", [])
+            if project_name:
+                project.name = project_name
+            if organisation_id:
+                try:
+                    organisation = Organisation.objects.get(pk=organisation_id)
+                    project.organisation = organisation
+
+                except Organisation.DoesNotExist:
+                    return Response(
+                        {"error": "Organisation not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            # Clear existing HR associations and add the provided ones
+            project.hr.clear()
+            for hr_id in hr_ids:
+                try:
+                    hr = HR.objects.get(pk=hr_id)
+                    project.hr.add(hr)
+                except HR.DoesNotExist:
+                    return Response(
+                        {"error": f"HR with ID {hr_id} not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            project.email_reminder = project_details.get("email_reminder")
+            project.whatsapp_reminder = project_details.get("whatsapp_reminder")
+            project.calendar_invites = project_details.get("calendar_invites")
+            project.nudges = project_details.get("nudges")
+            project.pre_assessment = project_details.get("pre_assessment")
+            project.post_assessment = project_details.get("post_assessment")
+            project.is_finance_enabled = project_details.get("finance")
+            project.junior_pmo = junior_pmo
+            project.teams_enabled = request.data.get("teams_enabled")
+            project.project_type = request.data.get("project_type")
+            project.save()
+
+            pre_assessment = None
+            post_assessment = None
+
+            batches = SchedularBatch.objects.filter(project=project)
+
+            if not prev_pre_assessment == project.pre_assessment:
+                for batch in batches:
+                    course = Course.objects.filter(batch=batch).first()
+                    if course:
+
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+
+                        lesson1 = Lesson.objects.create(
+                            course=course,
+                            name="Pre Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=max_order + 1,
+                        )
+                        assessment1 = AssessmentLesson.objects.create(
+                            lesson=lesson1, type="pre"
+                        )
+                        post_assessment_lesson = AssessmentLesson.objects.filter(
+                            lesson__course=course, type="post"
+                        ).first()
+
+                        pre_assessment = Assessment.objects.create(
+                            name=batch.name + " " + "Pre",
+                            participant_view_name=batch.name + " " + "Pre",
+                            assessment_type="self",
+                            organisation=batch.project.organisation,
+                            assessment_timing="pre",
+                            unique_id=str(uuid.uuid4()),
+                            batch=batch,
+                        )
+                        pre_assessment.hr.set(batch.project.hr.all())
+                        pre_assessment.save()
+                        for learner in batch.learners.all():
+
+                            if pre_assessment.participants_observers.filter(
+                                participant__email=learner.email
+                            ).exists():
+                                continue
+                            new_participant = create_learner(name, learner.email)
+                            if learner.phone:
+                                new_participant.phone = learner.phone
+                            new_participant.save()
+                            mapping = ParticipantObserverMapping.objects.create(
+                                participant=new_participant
+                            )
+                            if learner.phone:
+                                add_contact_in_wati(
+                                    "learner",
+                                    new_participant.name,
+                                    new_participant.phone,
+                                )
+                            unique_id = uuid.uuid4()  # Generate a UUID4
+                            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                            unique_id_instance = ParticipantUniqueId.objects.create(
+                                participant=new_participant,
+                                assessment=pre_assessment,
+                                unique_id=unique_id,
+                            )
+                            mapping.save()
+                            pre_assessment.participants_observers.add(mapping)
+                            pre_assessment.save()
+
+                        if post_assessment_lesson:
+                            pre_assessment.questionnaire = (
+                                post_assessment_lesson.assessment_modal.questionnaire
+                            )
+                            pre_assessment.email_reminder = (
+                                post_assessment_lesson.assessment_modal.email_reminder
+                            )
+                            pre_assessment.whatsapp_reminder = (
+                                post_assessment_lesson.assessment_modal.whatsapp_reminder
+                            )
+
+                            pre_assessment.save()
+
+                            post_assessment_lesson.assessment_modal.pre_assessment = (
+                                pre_assessment
+                            )
+
+                            post_assessment_lesson.assessment_modal.save()
+
+                        assessment1.assessment_modal = pre_assessment
+                        assessment1.save()
+
+            if not prev_post_assessment == project.post_assessment:
+                for batch in batches:
+                    course = Course.objects.filter(batch=batch).first()
+                    if course:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        lesson1 = Lesson.objects.create(
+                            course=course,
+                            name="Post Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=max_order + 1,
+                        )
+                        assessment1 = AssessmentLesson.objects.create(
+                            lesson=lesson1, type="post"
+                        )
+                        pre_assessment_lesson = AssessmentLesson.objects.filter(
+                            lesson__course=course, type="pre"
+                        ).first()
+                        post_assessment = Assessment.objects.create(
+                            name=batch.name + " " + "Post",
+                            participant_view_name=batch.name + " " + "Post",
+                            assessment_type="self",
+                            organisation=batch.project.organisation,
+                            assessment_timing="post",
+                            unique_id=str(uuid.uuid4()),
+                            batch=batch,
+                        )
+                        post_assessment.hr.set(batch.project.hr.all())
+                        post_assessment.save()
+                        for learner in batch.learners.all():
+
+                            if post_assessment.participants_observers.filter(
+                                participant__email=learner.email
+                            ).exists():
+                                continue
+                            new_participant = create_learner(name, learner.email)
+                            if learner.phone:
+                                new_participant.phone = learner.phone
+                            new_participant.save()
+                            mapping = ParticipantObserverMapping.objects.create(
+                                participant=new_participant
+                            )
+                            if learner.phone:
+                                add_contact_in_wati(
+                                    "learner",
+                                    new_participant.name,
+                                    new_participant.phone,
+                                )
+                            unique_id = uuid.uuid4()  # Generate a UUID4
+                            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                            unique_id_instance = ParticipantUniqueId.objects.create(
+                                participant=new_participant,
+                                assessment=post_assessment,
+                                unique_id=unique_id,
+                            )
+                            mapping.save()
+                            post_assessment.participants_observers.add(mapping)
+                            post_assessment.save()
+
+                        if pre_assessment_lesson:
+                            post_assessment.questionnaire = (
+                                pre_assessment_lesson.assessment_modal.questionnaire
+                            )
+                            post_assessment.email_reminder = (
+                                pre_assessment_lesson.assessment_modal.email_reminder
+                            )
+                            post_assessment.whatsapp_reminder = (
+                                pre_assessment_lesson.assessment_modal.whatsapp_reminder
+                            )
+                            post_assessment.pre_assessment = (
+                                pre_assessment_lesson.assessment_modal
+                            )
+                            post_assessment.save()
+                        assessment1.assessment_modal = post_assessment
+                        assessment1.save()
+
+            if not project.pre_assessment and not project.post_assessment:
+                batches = SchedularBatch.objects.filter(project=project)
+                if batches:
+                    for batch in batches:
+                        course = Course.objects.filter(batch=batch).first()
+                        if course:
+                            lessons = Lesson.objects.filter(course=course)
+                            for lesson in lessons:
+                                if lesson.lesson_type == "assessment":
+                                    lesson.status = "draft"
+                                    lesson.save()
+            return Response(
+                {"message": "Project updated successfully"}, status=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to updated project"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-    project_details = request.data
-    junior_pmo = None
-    if "junior_pmo" in project_details:
-        junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
-
-    project_name = project_details.get("project_name")
-    organisation_id = project_details.get("organisation_id")
-    hr_ids = project_details.get("hr", [])
-    if project_name:
-        project.name = project_name
-    if organisation_id:
-        try:
-            organisation = Organisation.objects.get(pk=organisation_id)
-            project.organisation = organisation
-
-        except Organisation.DoesNotExist:
-            return Response(
-                {"error": "Organisation not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-    # Clear existing HR associations and add the provided ones
-    project.hr.clear()
-    for hr_id in hr_ids:
-        try:
-            hr = HR.objects.get(pk=hr_id)
-            project.hr.add(hr)
-        except HR.DoesNotExist:
-            return Response(
-                {"error": f"HR with ID {hr_id} not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-    project.email_reminder = project_details.get("email_reminder")
-    project.whatsapp_reminder = project_details.get("whatsapp_reminder")
-    project.calendar_invites = project_details.get("calendar_invites")
-    project.nudges = project_details.get("nudges")
-    project.pre_post_assessment = project_details.get("pre_post_assessment")
-    project.is_finance_enabled = project_details.get("finance")
-    project.junior_pmo = junior_pmo
-    project.teams_enabled = request.data.get("teams_enabled")
-    project.project_type = request.data.get("project_type")
-    project.save()
-
-    if not project.pre_post_assessment:
-        batches = SchedularBatch.objects.filter(project=project)
-        if batches:
-            for batch in batches:
-                course = Course.objects.filter(batch=batch).first()
-                if course:
-                    lessons = Lesson.objects.filter(course=course)
-                    for lesson in lessons:
-                        if lesson.lesson_type == "assessment":
-                            lesson.status = "draft"
-                            lesson.save()
-    return Response(
-        {"message": "Project updated successfully"}, status=status.HTTP_200_OK
-    )
 
 
 @api_view(["POST"])
@@ -6613,7 +6810,7 @@ def get_project_wise_progress_data(request, project_id):
                     assessment=post_assessment, participant=participant
                 ).first()
 
-                if project and project.pre_post_assessment:
+                if project and project.pre_assessment:
                     temp["pre_assessment"] = "Yes" if pre_participant_response else "No"
 
                 for session in project.project_structure:
@@ -6669,7 +6866,7 @@ def get_project_wise_progress_data(request, project_id):
                         else:
                             temp[f"{session_type} {session['order']}"] = "No"
 
-                if project and project.pre_post_assessment:
+                if project and project.post_assessment:
                     temp["post_assessment"] = (
                         "Yes" if post_participant_response else "No"
                     )
@@ -8080,6 +8277,19 @@ def learner_action_items_in_batch(request, batch_id, learner_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def learner_action_items_in_session(request, session_id):
+    session = SchedularSessions.objects.get(id = session_id)
+    action_items = ActionItem.objects.filter(
+        batch__id=session.coaching_session.batch.id, learner__id=session.learner.id
+    ).order_by("-created_at")
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def action_items_in_batch(request, batch_id):
     action_items = ActionItem.objects.filter(batch__id=batch_id).order_by("-created_at")
     action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
@@ -8111,14 +8321,13 @@ MOVEMENT_TYPES = {
     4: "Excellent Movement",
 }
 
-STATUS_LABELS =  {
-    'not_started': 'Not Started',
-    'occasionally_doing': 'Occasionally Doing',
-    'regularly_doing': 'Regularly Doing',
-    'actively_pursuing': 'Actively Pursuing',
-    'consistently_achieving': 'Consistently Achieving'
+STATUS_LABELS = {
+    "not_started": "Not Started",
+    "occasionally_doing": "Occasionally Doing",
+    "regularly_doing": "Regularly Doing",
+    "actively_pursuing": "Actively Pursuing",
+    "consistently_achieving": "Consistently Achieving",
 }
-
 
 
 @api_view(["GET"])
@@ -8465,13 +8674,18 @@ def batch_competency_movement(request, batch_id, competency_id):
     behavior_names = {behavior.name: behavior.id for behavior in competency_behaviors}
 
     # Initialize a dictionary to store counts for each behavior in each status
-    behavior_status_counts = {behavior_name: {status[0]: 0 for status in STATUS_CHOICES} for behavior_name in behavior_names}
+    behavior_status_counts = {
+        behavior_name: {status[0]: 0 for status in STATUS_CHOICES}
+        for behavior_name in behavior_names
+    }
 
     # Fetch status counts for each behavior from the database
     for behavior_name, behavior_id in behavior_names.items():
         status_counts_queryset = (
             ActionItem.objects.filter(
-                batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+                batch__id=batch_id,
+                competency__id=competency_id,
+                behavior__id=behavior_id,
             )
             .values("current_status")
             .annotate(count=Count("id"))
@@ -8479,15 +8693,22 @@ def batch_competency_movement(request, batch_id, competency_id):
 
         # Update counts for existing statuses for the current behavior
         for item in status_counts_queryset:
-            behavior_status_counts[behavior_name][item["current_status"]] = item["count"]
+            behavior_status_counts[behavior_name][item["current_status"]] = item[
+                "count"
+            ]
 
     # Prepare data for response
     action_item_counts = [
         {
             "status": STATUS_LABELS[status],
-            **{behavior_name: counts[status] for behavior_name, counts in behavior_status_counts.items()}
+            **{
+                behavior_name: counts[status]
+                for behavior_name, counts in behavior_status_counts.items()
+            },
         }
         for status, _ in STATUS_CHOICES
     ]
 
-    return Response({"action_item_movement":  data ,  "action_item_counts" : action_item_counts })
+    return Response(
+        {"action_item_movement": data, "action_item_counts": action_item_counts}
+    )

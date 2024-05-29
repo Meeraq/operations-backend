@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django_celery_beat.models import PeriodicTask
 import uuid
 from assessmentApi.models import Assessment as AssessmentModal, Competency, Behavior
-from api.models import SessionRequestCaas
+from api.models import SessionRequestCaas, Project
 
 # Create your models here.
 
@@ -285,6 +285,9 @@ class Nudge(models.Model):
     batch = models.ForeignKey(
         SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
+    caas_project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
     trigger_date = models.DateField(default=None, blank=True, null=True)
     learner_ids = models.JSONField(
         default=list, blank=True
@@ -355,4 +358,3 @@ class CttFeedbackResponse(models.Model):
     answers = models.ManyToManyField(Answer)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-

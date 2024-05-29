@@ -82,6 +82,7 @@ from .serializers import (
     SalesDepthOneSerializer,
     GoalDescriptionSerializer,
     CoachProfileShareSerializer,
+    UserFeedbackSerializer,
 )
 from zohoapi.serializers import (
     VendorDepthOneSerializer,
@@ -162,6 +163,7 @@ from .models import (
     Sales,
     TableHiddenColumn,
     CoachProfileShare,
+    UserFeedback,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -232,6 +234,12 @@ import environ
 from time import sleep
 from django.db.models import Max
 from openai import OpenAI
+from assessmentApi.models import (
+    Assessment,
+    ParticipantObserverMapping,
+    ParticipantUniqueId,
+    ProjectAssessmentMapping,
+)
 
 env = environ.Env()
 
@@ -281,6 +289,56 @@ def calculate_nps_from_answers(answers):
     if ratings:
         return calculate_nps(ratings)
     return None
+
+
+def create_learner(learner_name, learner_email):
+    try:
+        with transaction.atomic():
+            if not learner_email:
+                raise ValueError("Username field is required")
+
+            user = User.objects.filter(username=learner_email).first()
+            learner = None
+            if user:
+                learner = Learner.objects.filter(user__user=user).first()
+                if learner:
+                    profile = Profile.objects.get(user=user)
+                    learner_role, created = Role.objects.get_or_create(name="learner")
+                    profile.roles.add(learner_role)
+                    learner.name = learner_name.strip().title()
+                    learner.save()
+                    return learner
+                else:
+                    profile = Profile.objects.get(user=user)
+            else:
+                temp_password = "".join(
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
+                    )
+                )
+                user = User.objects.create_user(
+                    username=learner_email,
+                    password=temp_password,
+                    email=learner_email,
+                )
+
+                user.save()
+                profile = Profile.objects.create(user=user)
+            learner_role, created = Role.objects.get_or_create(name="learner")
+            profile.roles.add(learner_role)
+            profile.save()
+            learner = Learner.objects.create(
+                user=profile,
+                name=learner_name.strip().title(),
+                email=learner_email,
+            )
+            return learner
+    except ValueError as e:
+        raise ValueError(str(e))
+
+    except Exception as e:
+        raise Exception(str(e))
 
 
 def add_contact_in_wati(user_type, name, phone):
@@ -1031,9 +1089,9 @@ FIELD_NAME_VALUES = {
     "city": "City",
     "country": "Country",
     "topic": "Topic",
-    "project_type":"Project Type",
-    "product_type":"Product Type",
-    "category" : "Category"
+    "project_type": "Project Type",
+    "product_type": "Product Type",
+    "category": "Category",
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -1708,6 +1766,9 @@ def create_project_cass(request):
                     if request.data["is_project_structure"]
                     else request.data["is_session_expiry"]
                 ),
+                pre_assessment=request.data["pre_assessment"],
+                post_assessment=request.data["post_assessment"],
+                nudges=request.data["nudges"],
             )
 
             project.save()
@@ -1731,6 +1792,9 @@ def create_project_cass(request):
                 handover.caas_project = project
                 handover.save()
                 project.project_structure = handover.project_structure
+                project.pre_assessment = handover.pre_assessment
+                project.post_assessment = handover.post_assessment
+                project.nudges = handover.nudges
                 project.save()
                 add_so_to_project("CAAS", project.id, handover.sales_order_ids)
             else:
@@ -4830,7 +4894,6 @@ class SessionCountsForAllLearners(APIView):
 
                 completed_sessions_count = SessionRequestCaas.objects.filter(
                     status="completed",
-                    billable_session_number__isnull=False,
                     learner__id=learner_id,
                     is_archive=False,
                 ).count()
@@ -4838,7 +4901,6 @@ class SessionCountsForAllLearners(APIView):
                 total_sessions_count = SessionRequestCaas.objects.filter(
                     learner__id=learner_id,
                     # project_id = engagement.project_id
-                    billable_session_number__isnull=False,
                     is_archive=False,
                 ).count()
 
@@ -8300,102 +8362,256 @@ def get_all_engagements(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_project_caas(request, project_id):
-    organisation = Organisation.objects.filter(
-        id=request.data["organisation_id"]
-    ).first()
-    junior_pmo = None
-    if "junior_pmo" in request.data:
-        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
-
     try:
-        # Retrieve the existing project from the database
-        project = get_object_or_404(Project, pk=project_id)
-        # Update project attributes based on the data in the PUT request
-        project.name = request.data.get("project_name", project.name)
-        project.approx_coachee = request.data.get(
-            "approx_coachee", project.approx_coachee
-        )
-        project.organisation = organisation
-        project.frequency_of_session = request.data.get(
-            "frequency_of_session", project.frequency_of_session
-        )
-        project.interview_allowed = request.data.get(
-            "interview_allowed", project.interview_allowed
-        )
-        project.specific_coach = request.data.get(
-            "specific_coach", project.specific_coach
-        )
-        project.empanelment = request.data.get("empanelment", project.empanelment)
-        project.tentative_start_date = request.data.get(
-            "tentative_start_date", project.tentative_start_date
-        )
-        project.mode = request.data.get("mode", project.mode)
-        project.sold = request.data.get("sold", project.sold)
-        project.location = json.loads(request.data.get("location", "[]"))
-        project.project_description = request.data.get(
-            "project_description", project.project_description
-        )
-        project.coach_consent_mandatory = request.data.get(
-            "coach_consent_mandatory", project.coach_consent_mandatory
-        )
-        project.enable_emails_to_hr_and_coachee = request.data.get(
-            "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
-        )
+        with transaction.atomic():
+            organisation = Organisation.objects.filter(
+                id=request.data["organisation_id"]
+            ).first()
+            junior_pmo = None
+            if "junior_pmo" in request.data:
+                junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
 
-        project.masked_coach_profile = request.data.get(
-            "masked_coach_profile", project.masked_coach_profile
-        )
-
-        project.email_reminder = request.data.get(
-            "email_reminder", project.email_reminder
-        )
-        project.whatsapp_reminder = request.data.get(
-            "whatsapp_reminder", project.whatsapp_reminder
-        )
-        project.calendar_invites = request.data.get(
-            "calendar_invites", project.calendar_invites
-        )
-
-        if project.project_type == "COD":
-            project.is_project_structure = request.data.get(
-                "is_project_structure", project.is_project_structure
+            # Retrieve the existing project from the database
+            project = get_object_or_404(Project, pk=project_id)
+            prev_pre_assessment = project.pre_assessment
+            prev_post_assessment = project.post_assessment
+            # Update project attributes based on the data in the PUT request
+            project.name = request.data.get("project_name", project.name)
+            project.approx_coachee = request.data.get(
+                "approx_coachee", project.approx_coachee
             )
-            total_credits_in_hours = int(request.data.get("total_credits"))
-            total_credits_in_minutes = total_credits_in_hours * 60
-            project.total_credits = total_credits_in_minutes
-            if not project.is_project_structure:
-                project.duration_of_each_session = request.data.get(
-                    "duration_of_each_session", project.duration_of_each_session
+            project.organisation = organisation
+            project.frequency_of_session = request.data.get(
+                "frequency_of_session", project.frequency_of_session
+            )
+            project.interview_allowed = request.data.get(
+                "interview_allowed", project.interview_allowed
+            )
+            project.specific_coach = request.data.get(
+                "specific_coach", project.specific_coach
+            )
+            project.empanelment = request.data.get("empanelment", project.empanelment)
+            project.tentative_start_date = request.data.get(
+                "tentative_start_date", project.tentative_start_date
+            )
+            project.mode = request.data.get("mode", project.mode)
+            project.sold = request.data.get("sold", project.sold)
+            project.location = json.loads(request.data.get("location", "[]"))
+            project.project_description = request.data.get(
+                "project_description", project.project_description
+            )
+            project.coach_consent_mandatory = request.data.get(
+                "coach_consent_mandatory", project.coach_consent_mandatory
+            )
+            project.enable_emails_to_hr_and_coachee = request.data.get(
+                "enable_emails_to_hr_and_coachee",
+                project.enable_emails_to_hr_and_coachee,
+            )
+
+            project.masked_coach_profile = request.data.get(
+                "masked_coach_profile", project.masked_coach_profile
+            )
+
+            project.email_reminder = request.data.get(
+                "email_reminder", project.email_reminder
+            )
+            project.whatsapp_reminder = request.data.get(
+                "whatsapp_reminder", project.whatsapp_reminder
+            )
+            project.calendar_invites = request.data.get(
+                "calendar_invites", project.calendar_invites
+            )
+            project.pre_assessment = request.data.get(
+                "pre_assessment", project.pre_assessment
+            )
+            project.post_assessment = request.data.get(
+                "post_assessment", project.post_assessment
+            )
+            project.nudges = request.data.get("nudges", project.nudges)
+
+            if project.project_type == "COD":
+                project.is_project_structure = request.data.get(
+                    "is_project_structure", project.is_project_structure
                 )
-            if not project.is_project_structure and request.data["is_session_expiry"]:
-                project.is_session_expiry = request.data.get(
-                    "is_session_expiry", project.is_session_expiry
+                total_credits_in_hours = int(request.data.get("total_credits"))
+                total_credits_in_minutes = total_credits_in_hours * 60
+                project.total_credits = total_credits_in_minutes
+                if not project.is_project_structure:
+                    project.duration_of_each_session = request.data.get(
+                        "duration_of_each_session", project.duration_of_each_session
+                    )
+                if (
+                    not project.is_project_structure
+                    and request.data["is_session_expiry"]
+                ):
+                    project.is_session_expiry = request.data.get(
+                        "is_session_expiry", project.is_session_expiry
+                    )
+                    request_expiry_time_in_hours = int(
+                        request.data["request_expiry_time"]
+                    )
+                    request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
+                    project.request_expiry_time = request_expiry_time_in_minutes
+                if project.total_credits != request.data.get("total_credits"):
+                    project.credit_history.append(request.data.get("total_credits"))
+
+            project.finance = request.data.get("finance", project.finance)
+            project.junior_pmo = junior_pmo
+
+            project.hr.clear()
+            for hr in request.data["hr"]:
+                single_hr = HR.objects.get(id=hr)
+                project.hr.add(single_hr)
+
+            # Save the updated project
+
+            project.save()
+
+            pre_assessment = None
+            post_assessment = None
+
+            if not prev_pre_assessment == project.pre_assessment:
+
+                pre_assessment = Assessment.objects.create(
+                    name=project.name + " " + "Pre",
+                    participant_view_name=project.name + " " + "Pre",
+                    assessment_type="self",
+                    organisation=project.organisation,
+                    assessment_timing="pre",
+                    unique_id=str(uuid.uuid4()),
                 )
-                request_expiry_time_in_hours = int(request.data["request_expiry_time"])
-                request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
-                project.request_expiry_time = request_expiry_time_in_minutes
-            if project.total_credits != request.data.get("total_credits"):
-                project.credit_history.append(request.data.get("total_credits"))
+                pre_assessment.hr.set(project.hr.all())
+                pre_assessment.save()
+                engangments = Engagement.objects.filter(project=project)
+                for engangment in engangments:
+                    learner = engangment.learner
+                    if pre_assessment.participants_observers.filter(
+                        participant__email=learner.email
+                    ).exists():
+                        continue
+                    new_participant = create_learner(name, learner.email)
+                    if learner.phone:
+                        new_participant.phone = learner.phone
+                    new_participant.save()
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=new_participant
+                    )
+                    if learner.phone:
+                        add_contact_in_wati(
+                            "learner",
+                            new_participant.name,
+                            new_participant.phone,
+                        )
+                    unique_id = uuid.uuid4()  # Generate a UUID4
+                    # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                    unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=new_participant,
+                        assessment=pre_assessment,
+                        unique_id=unique_id,
+                    )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
+                project_assessment_mapping, created = (
+                    ProjectAssessmentMapping.objects.get_or_create(project=project)
+                )
+                if project_assessment_mapping and not created:
+                    mapping_post_assessment = (
+                        project_assessment_mapping.assessments.filter(
+                            assessment_timing="post"
+                        ).first()
+                    )
+                    pre_assessment.questionnaire = mapping_post_assessment.questionnaire
+                    pre_assessment.email_reminder = (
+                        mapping_post_assessment.email_reminder
+                    )
+                    pre_assessment.whatsapp_reminder = (
+                        mapping_post_assessment.whatsapp_reminder
+                    )
 
-        project.finance = request.data.get("finance", project.finance)
-        project.junior_pmo = junior_pmo
+                    pre_assessment.save()
 
-        project.hr.clear()
-        for hr in request.data["hr"]:
-            single_hr = HR.objects.get(id=hr)
-            project.hr.add(single_hr)
+                    mapping_post_assessment.pre_assessment = pre_assessment
 
-        # Save the updated project
+                    mapping_post_assessment.save()
 
-        project.save()
+                    project_assessment_mapping.assessments.add(pre_assessment)
+                    project_assessment_mapping.save()
+                else:
 
-        # You can return a success response with the updated project details
-        return Response(
-            {"message": "Project updated successfully", "project_id": project.id}
-        )
+                    project_assessment_mapping.assessments.add(pre_assessment)
+                    project_assessment_mapping.save()
+            if not prev_post_assessment == project.post_assessment:
 
-    except Project.DoesNotExist:
-        return Response({"error": "Project not found"}, status=404)
+                post_assessment = Assessment.objects.create(
+                    name=project.name + " " + "Post",
+                    participant_view_name=project.name + " " + "Post",
+                    assessment_type="self",
+                    organisation=project.organisation,
+                    assessment_timing="post",
+                    unique_id=str(uuid.uuid4()),
+                )
+                post_assessment.hr.set(project.hr.all())
+                post_assessment.save()
+                engangments = Engagement.objects.filter(project=project)
+                for engangment in engangments:
+                    learner = engangment.learner
+                    if post_assessment.participants_observers.filter(
+                        participant__email=learner.email
+                    ).exists():
+                        continue
+                    new_participant = create_learner(name, learner.email)
+                    if learner.phone:
+                        new_participant.phone = learner.phone
+                    new_participant.save()
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=new_participant
+                    )
+                    if learner.phone:
+                        add_contact_in_wati(
+                            "learner",
+                            new_participant.name,
+                            new_participant.phone,
+                        )
+                    unique_id = uuid.uuid4()  # Generate a UUID4
+                    # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                    unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=new_participant,
+                        assessment=post_assessment,
+                        unique_id=unique_id,
+                    )
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+
+                project_assessment_mapping, created = (
+                    ProjectAssessmentMapping.objects.get_or_create(project=project)
+                )
+                if project_assessment_mapping and not created:
+                    mapping_pre_assessment = (
+                        project_assessment_mapping.assessments.filter(
+                            assessment_timing="pre"
+                        ).first()
+                    )
+                    post_assessment.questionnaire = mapping_pre_assessment.questionnaire
+                    post_assessment.email_reminder = (
+                        mapping_pre_assessment.email_reminder
+                    )
+                    post_assessment.whatsapp_reminder = (
+                        mapping_pre_assessment.whatsapp_reminder
+                    )
+                    post_assessment.pre_assessment = mapping_pre_assessment
+                    post_assessment.save()
+                    project_assessment_mapping.assessments.add(post_assessment)
+                    project_assessment_mapping.save()
+                else:
+
+                    project_assessment_mapping.assessments.add(post_assessment)
+                    project_assessment_mapping.save()
+            # You can return a success response with the updated project details
+            return Response(
+                {"message": "Project updated successfully", "project_id": project.id}
+            )
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
@@ -8830,8 +9046,6 @@ class StandardFieldAddValue(APIView):
                     return Response({"error": "Value already present."}, status=400)
 
         except Exception as e:
-            # Log the exception
-            print('hello', str(e))
             # Return error response if any exception occurs
             return Response(
                 {"error": "Failed to add value."},
@@ -12462,3 +12676,32 @@ def rewrite(request):
         ],
     )
     return Response(completion.choices[0].message.content, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def user_feedback_response(request):
+    try:
+        feedback_serializer = UserFeedbackSerializer(data=request.data)
+        if feedback_serializer.is_valid():
+            feedback_serializer.save()
+            return Response(
+                {"success": "User feedback submitted successfully"}, status=201
+            )
+        return Response(feedback_serializer.errors, status=400)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_feedback_repsonses(request):
+    try:
+        all_user_feedback_data = UserFeedback.objects.all()
+        all_user_feedback_data_serializer = UserFeedbackSerializer(
+            all_user_feedback_data, many=True
+        )
+        return Response(all_user_feedback_data_serializer.data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
