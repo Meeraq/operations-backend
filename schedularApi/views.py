@@ -104,6 +104,7 @@ from .serializers import (
     HandoverDetailsSerializerWithOrganisationName,
     AssetsSerializer,
     GmSheetDetailedSerializer,
+    GmSheetSalesOrderExistsSerializer
 )
 from .models import (
     SchedularBatch,
@@ -8016,7 +8017,7 @@ def get_gmsheet_by_sales(request, sales_person_id):
         gmsheet = GmSheet.objects.filter(sales__id=sales_person_id).order_by(
             "-created_at"
         )
-        serializer = GmSheetSerializer(gmsheet, many=True)
+        serializer = GmSheetSalesOrderExistsSerializer(gmsheet, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))

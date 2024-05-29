@@ -22,7 +22,7 @@ from .models import (
 )
 from api.models import Coach
 from api.models import Sales
-
+from zohoapi.models import SalesOrder
 
 class SchedularProjectSerializer(serializers.ModelSerializer):
     class Meta:
@@ -247,6 +247,17 @@ class GmSheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = GmSheet
         fields = '__all__'
+
+class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
+    sales_order_exists = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GmSheet
+        fields = '__all__'
+
+    def get_sales_order_exists(self, obj):
+        return SalesOrder.objects.filter(gm_sheet_id=obj.id).exists()
+
 
 class OfferingSerializer(serializers.ModelSerializer):
     class Meta:
