@@ -9,7 +9,8 @@ urlpatterns = [
         name="get-all-schedular-projects",
     ),
     path("create-benchmark/", views.create_benchmark, name="create_benchmark"),
-    path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
+    # path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
+    path('update-benchmark/', views.update_benchmark, name='update_benchmark'),
     path("get-benchmark/", views.get_all_benchmarks),
     path("create-gmsheet/", views.create_gmsheet, name="create_gmsheet"),
     path("update-status/", views.update_status, name="update-status"),
@@ -27,7 +28,10 @@ urlpatterns = [
         name="offerings-list",
     ),
     path("gmsheet/maxNumber/", views.max_gmsheet_number, name="max_gmsheet_number"),
+    path("asset/maxNumber/", views.max_asset_number, name="max_asset_number"),
     path("gmsheet-by-sales/<int:sales_person_id>", views.get_gmsheet_by_sales),
+    path('create-employee/', views.create_employee, name='employee-create'),
+    path('employees/', views.get_employees, name='get_employees'),
     path(
         "current-or-next-year/",
         views.get_current_or_next_year,
@@ -445,6 +449,11 @@ urlpatterns = [
         "batch/action-items/<int:batch_id>/<int:learner_id>/",
         views.learner_action_items_in_batch,
         name="learner_action_items_in_batch",
+    ),
+    path(
+        "action-items/session/<int:session_id>/",
+        views.learner_action_items_in_session,
+        name="learner_action_items_in_session",
     ),
     path(
         "batch/action-items/<int:batch_id>/",
