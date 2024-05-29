@@ -447,6 +447,11 @@ urlpatterns = [
         name="learner_action_items_in_batch",
     ),
     path(
+        "action-items/session/<int:session_id>/",
+        views.learner_action_items_in_session,
+        name="learner_action_items_in_session",
+    ),
+    path(
         "batch/action-items/<int:batch_id>/",
         views.action_items_in_batch,
         name="action_items_in_batch",
