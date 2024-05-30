@@ -944,33 +944,44 @@ def delete_asset(request):
     asset.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 
-
 @api_view(["PUT"])
 def update_asset(request):
     payload = request.data
     values = payload.get("values")
     asset_id = payload.get("id")
+    
     if not asset_id:
         return Response(
             {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
         )
+    
     try:
         asset = Assets.objects.get(id=asset_id)
     except Assets.DoesNotExist:
         return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+    
     serializer = AssetsSerializer(
         asset, data=values, partial=True
     )  # Use partial=True for partial updates
+    
     if serializer.is_valid():
         instance = serializer.save()
+        
         update_entry = {
-            "date": str(datetime.now()),
+            "date": datetime.now().isoformat(),
             "status": instance.status,
-            "assigned_to": instance.assigned_to,
+            "assigned_to": instance.assigned_to.id if instance.assigned_to else None,
         }
+        
+        # Ensure updates field is a list before appending
+        if not isinstance(instance.updates, list):
+            instance.updates = []
+        
         instance.updates.append(update_entry)
         instance.save()
+        
         return Response(serializer.data)
+    
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
