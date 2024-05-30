@@ -907,9 +907,9 @@ def get_all_ctt_faculties(request):
 @permission_classes([IsAuthenticated])
 def get_the_profitability_of_a_batch(request, batch_id):
     try:
-        batch_user = BatchUsers.objects.using("ctt").get(id=batch_id)
-        salesorders = SalesOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.batch.name)
-        purchase_orders = PurchaseOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.batch.name)
+        batch_user = Batches.objects.using("ctt").get(id=batch_id)
+        salesorders = SalesOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.name)
+        purchase_orders = PurchaseOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.name)
         
         total = Decimal('0.0')
         invoiced_amount = Decimal('0.0')

@@ -83,6 +83,7 @@ from .serializers import (
     GoalDescriptionSerializer,
     CoachProfileShareSerializer,
     UserFeedbackSerializer,
+    ChatHistorySerializer,
 )
 from zohoapi.serializers import (
     VendorDepthOneSerializer,
@@ -107,6 +108,7 @@ import jwt
 import uuid
 import pytz
 import math
+import openai
 from django.db.models import IntegerField
 from django.db.models.functions import Cast
 from rest_framework.exceptions import AuthenticationFailed
@@ -164,6 +166,7 @@ from .models import (
     TableHiddenColumn,
     CoachProfileShare,
     UserFeedback,
+    ChatHistory,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -202,6 +205,7 @@ from schedularApi.models import (
     Expense,
     CoachContract,
     ProjectContract,
+    Benchmark
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
@@ -245,6 +249,63 @@ env = environ.Env()
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+
+def generate_prompt(experience_type, experience):
+    if experience_type == "coaching":
+        return f"""        
+        Purpose:
+        
+        Approach:
+        
+        Certifications & Training:
+        
+        Hours of coaching experience:
+        
+        Sectors Coached:
+        
+        Focus Areas:
+        
+        Illustrative Coaching Outcomes:
+        
+        Special Recognitions & Features:
+        
+        Here is the experience: {experience}
+        """
+    elif experience_type == "corporate":
+        return f"""        
+        Purpose:
+        
+        Approach:
+        
+        Key Projects:
+        
+        Leadership Roles:
+        
+        Achievements:
+        
+        Industry Impact:
+        
+        Special Recognitions & Awards:
+        
+        Here is the experience: {experience}
+        """
+    elif experience_type == "facilitator":
+        return f"""        
+        Training Hours:
+        
+        Areas of Expertise:
+        
+        Programs and Workshops Offered:
+        
+        Coaching Philosophy and Approach:
+        
+        Notable Achievements:
+        
+        Here is the experience: {experience}
+        """
+    else:
+        return None
 
 
 def get_current_date_timestamps():
@@ -1088,9 +1149,10 @@ FIELD_NAME_VALUES = {
     "city": "City",
     "country": "Country",
     "topic": "Topic",
-    "project_type": "Project Type",
-    "product_type": "Product Type",
-    "category": "Category",
+    "project_type":"Project Type",
+    "product_type":"Product Type",
+    "category" : "Category",
+    "asset_location": "Location"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -8974,7 +9036,6 @@ class StandardizedFieldRequestAPI(APIView):
             }
         )
 
-
 class StandardFieldAddValue(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "finance", "leader")]
 
@@ -8983,38 +9044,75 @@ class StandardFieldAddValue(APIView):
             with transaction.atomic():
                 # Extracting data from request body
                 field_name = request.data.get("field_name")
-                print(field_name)
                 option_value = request.data.get("optionValue").strip()
+
+                # Validate the input data
+                if not field_name or not option_value:
+                    return Response({"error": "Field name and option value are required."}, status=400)
 
                 # Get or create the StandardizedField instance for the given field_name
                 standardized_field, created = StandardizedField.objects.get_or_create(
                     field=field_name
                 )
-                print(standardized_field, option_value, standardized_field.values)
+
                 # Check if the option_value already exists in the values list of the standardized_field
                 if option_value not in standardized_field.values:
                     # Add the option_value to the values list and save the instance
                     standardized_field.values.append(option_value)
                     standardized_field.save()
+
+                    # Check if the field_name is 'project_type'
+                    if field_name == 'project_type':
+                        # Check if there are Benchmark instances
+                        if not Benchmark.objects.exists():
+                            # Create a Benchmark instance with the project_type key
+                            Benchmark.objects.create(project_type={option_value: ""})
+                            return Response(
+                                {"message": f"Benchmark created with {option_value} in project_type."},
+                                status=200,
+                            )
+
+                        # Filter Benchmark instances by the current year
+                        current_year = datetime.now().year
+                        benchmarks = Benchmark.objects.all()
+
+                        if benchmarks.exists():
+                            # Update the project_type field of existing Benchmark instances
+                            for benchmark in benchmarks:
+                                if not benchmark.project_type:
+                                    benchmark.project_type = {}  # Ensure project_type is a dictionary
+                                benchmark.project_type[option_value] = ""
+                                benchmark.save()
+
+                            return Response(
+                                {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field for the current year."},
+                                status=200,
+                            )
+                        else:
+                            # No Benchmark instances for the current year, create one and update project_type
+                            Benchmark.objects.create(year=current_year, project_type={option_value: ""})
+                            return Response(
+                                {"message": f"Benchmark created with {option_value} in project_type for the current year."},
+                                status=200,
+                            )
+
+                    # Return success response for other field names
+                    return Response(
+                        {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
+                        status=200,
+                    )
+
                 else:
                     # Return error response if the option_value already exists
                     return Response({"error": "Value already present."}, status=400)
 
-                # Return success response
-                return Response(
-                    {
-                        "message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."
-                    },
-                    status=200,
-                )
-
         except Exception as e:
-            print("hello", str(e))
             # Return error response if any exception occurs
             return Response(
                 {"error": "Failed to add value."},
                 status=500,
             )
+
 
 
 class StandardFieldEditValue(APIView):
@@ -9038,10 +9136,17 @@ class StandardFieldEditValue(APIView):
                     # Check if the previous_value exists in the values list of the standardized_field
                     if previous_value in standardized_field.values:
                         # Update the value if it exists
-
                         index = standardized_field.values.index(previous_value)
                         standardized_field.values[index] = new_value
                         standardized_field.save()
+
+                        # If the field_name is 'project_type', update the corresponding key in the project_type field of Benchmark instances
+                        if field_name == 'project_type':
+                            benchmarks = Benchmark.objects.all()
+                            for benchmark in benchmarks:
+                                if previous_value in benchmark.project_type:
+                                    benchmark.project_type[new_value] = benchmark.project_type.pop(previous_value)
+                                    benchmark.save()
 
                         # Return success response
                         return Response(
@@ -9066,6 +9171,7 @@ class StandardFieldEditValue(APIView):
                     )
 
         except Exception as e:
+            # Log the exception
             print(str(e))
             # Return error response if any exception occurs
             return Response(
@@ -9187,6 +9293,17 @@ class StandardFieldDeleteValue(APIView):
                 # Retrieve the StandardizedField instance for the given field_name
                 standardized_field = StandardizedField.objects.get(field=field_name)
 
+                # Check if the field_name is 'project_type'
+                if field_name == 'project_type':
+                    # Retrieve all Benchmark instances
+                    benchmarks = Benchmark.objects.all()
+                    for benchmark in benchmarks:
+                        # Check if the option_value exists in the project_type field of the Benchmark instance
+                        if option_value in benchmark.project_type:
+                            # Remove the option_value from the project_type field and save the Benchmark instance
+                            del benchmark.project_type[option_value]
+                            benchmark.save()
+
                 # Check if the option_value exists in the values list of the standardized_field
                 if option_value in standardized_field.values:
                     # Remove the option_value from the values list and save the instance
@@ -9209,13 +9326,13 @@ class StandardFieldDeleteValue(APIView):
             return Response({"error": "Field not found."}, status=404)
 
         except Exception as e:
+            # Log the exception
             print(str(e))
             # Return error response if any other exception occurs
             return Response(
                 {"error": "Failed to delete value."},
                 status=500,
             )
-
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
@@ -12604,22 +12721,43 @@ def get_coach_shared_links(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def rewrite(request):
-    coaching_experience = request.data.get("coaching_experience", "")
+    coaching_experience = request.data.get("coaching_experience", None)
+    corporate_experience = request.data.get("corporate_experience", None)
+    facilitator_expertise = request.data.get("facilitator_expertise", None)
     client = OpenAI()
+
+    if coaching_experience:
+        prompt = generate_prompt("coaching", coaching_experience)
+    elif corporate_experience:
+        prompt = generate_prompt("corporate", corporate_experience)
+    elif facilitator_expertise:
+        prompt = generate_prompt("facilitator", facilitator_expertise)
+    else:
+        return Response(
+            {"error": "No experience provided."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if prompt is None:
+        return Response(
+            {"error": "Invalid experience type."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
     completion = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {
                 "role": "system",
-                "content": "Hi! I'm Meeraq's AI assistant. We help individuals and organizations unlock their full potential through personalized learning and development programs. Ask me anything about soft skills training, our approach, or how we can empower your team. Write the experiences such that the profiles are impressive to the meeraq's client",
+                "content": "Hi! I'm Meeraq's AI assistant. We help individuals and organizations unlock their full potential through personalized learning and development programs. Write the experiences such that the profiles are impressive to Meeraq's clients.",
             },
             {
                 "role": "user",
-                "content": f"Refine the provided coaching professional's experience profile. Ensure the revised content maintains the structure and format. Also dont add any conversational text for the user, just provide the final output experience. Here is the experience {coaching_experience}",
+                "content": f"Refine the provided prompt. Ensure the revised content maintains the structure and format. Also, don't add any conversational text for the user, just provide the final output experience in a crisp and shorter way. Give the output in html content should be inside a div not in anything else. {prompt}",
             },
         ],
     )
-    return Response(completion.choices[0].message.content, status=status.HTTP_200_OK)
+    return Response(
+        completion.choices[0].message.content.strip(), status=status.HTTP_200_OK
+    )
 
 
 @api_view(["POST"])
@@ -12649,3 +12787,69 @@ def get_user_feedback_repsonses(request):
         return Response(all_user_feedback_data_serializer.data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+    
+    
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def mira_assistant(request):
+    try:
+        client = OpenAI()
+        prompt = request.data.get("prompt")
+        user_id = request.data.get("user_id")
+        # created_at = request.data.get("created_at")
+        user_instance = User.objects.get(id=user_id)
+        chat_entry = ChatHistory.objects.create(prompt=prompt, user=user_instance)
+        last_three_chats = list(
+            ChatHistory.objects.order_by("-id")[:3].values_list("prompt", flat=True)
+        )
+        completion = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "\n".join(last_three_chats)},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        chat_entry.response = completion.choices[0].message.content.strip()
+        # chat_entry.created_at = created_at
+        chat_entry.save()
+
+        response_data = {
+            "response": completion.choices[0].message.content.strip(),
+            "current_time": timezone.now().isoformat()  # Convert current time to ISO format
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_prev_chat_data(request, user_id):
+    chat_history = ChatHistory.objects.filter(user__id=user_id, is_old=False)
+    serializer = ChatHistorySerializer(chat_history, many=True)
+    chat_data = serializer.data
+    return Response(chat_data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def new_chat_created(request, user_id):
+    try:
+        chat_history = ChatHistory.objects.filter(user__id=user_id)
+
+        chat_history.update(is_old=True)
+        return Response({"message": "New Chat Created!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create new chat."}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_prev_chat_history(request, user_id):
+    chat_history = ChatHistory.objects.filter(user__id=user_id, is_old=True)
+    serializer = ChatHistorySerializer(chat_history, many=True)
+    chat_data = serializer.data
+    return Response(chat_data)

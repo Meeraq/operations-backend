@@ -1375,7 +1375,7 @@ def get_invoice(request, invoice_id):
         bills = Bill.objects.filter(
             vendor_id=res["vendor_id"],
             custom_field_hash__cf_invoice=res["invoice_number"],
-            date=invoice['invoice_date']
+            date=invoice.invoice_date
         )
         matching_bill = bills.first()
         res["bill"] = {"status": matching_bill.status} if matching_bill else None
@@ -2952,9 +2952,9 @@ def get_all_sales_orders(request):
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders_for_a_batch(request, batch):
     try:
-        batch_user = BatchUsers.objects.using("ctt").get(id=batch)
+        batch_user = Batches.objects.using("ctt").get(id=batch)
         sales_orders_queryset = SalesOrder.objects.filter(
-            custom_field_hash__cf_ctt_batch=batch_user.batch.name
+            custom_field_hash__cf_ctt_batch=batch_user.name
         )
         all_sales_orders = SalesOrderGetSerializer(
             sales_orders_queryset, many=True
@@ -3819,72 +3819,81 @@ def update_sales_order_status(request, sales_order_id, status):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_total_revenue_and_cost(request):
+def get_total_revenue_and_cost(request,project_id,project_type):
     try:
-        total_rev = 0
-        total_cost = 0
-        all_order_mapping = OrdersAndProjectMapping.objects.all()
-        unique_sales_order_ids = set()
-        unique_purchase_order_ids = set()
+        all_po_id = set()
+        expenses = None
+        if project_type == "SEEQ":
+            expenses = Expense.objects.filter(batch__project__id=project_id)
+        elif project_type == "CAAS":
+            expenses = Expense.objects.filter(session__project__id=project_id)
+        else:
+            return Response(
+                {"error": "Invalid project_type"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        for expense in expenses:
+            all_po_id.add(expense.purchase_order_id)
+        if project_type =="SEEQ":
+            purchase_orders = PurchaseOrder.objects.filter(Q(purchaseorder_id__in=all_po_id) | Q(schedular_project_id=project_id)).distinct()
+        elif project_type == "CAAS":
+            purchase_orders = PurchaseOrder.objects.filter(Q(purchaseorder_id__in=all_po_id) | Q(caas_project_id=project_id)).distinct()
+        all_sales_orders = get_so_for_project(project_id, project_type)
+        total = Decimal('0.0')
+        invoiced_amount = Decimal('0.0')
+        not_invoiced_amount = Decimal('0.0')
+        paid_amount = Decimal('0.0')
+        currency_code = None
+        currency_symbol = None
+        
+        for sales_order in all_sales_orders:
+            total += Decimal(sales_order["total"])
+            currency_code = sales_order["currency_code"]
+            currency_symbol = sales_order["currency_symbol"]
 
-        for order_mapping in all_order_mapping:
-            print(order_mapping)
-            project_sales_orders_ids = order_mapping.sales_order_ids
-            project_purchase_orders_ids = order_mapping.purchase_order_ids
-            # Calculate total invoiced amount for the sales orders of this project
-            expenses = None
-            if order_mapping.project:
-                expenses = Expense.objects.filter(batch__project=order_mapping.project)
+            for invoice in sales_order["invoices"]:
+                invoiced_amount += Decimal(invoice["total"])
+            not_invoiced_amount += Decimal(sales_order["total"]) - invoiced_amount
 
-            if expenses:
-                for expense in expenses:
-                    if expense.purchase_order_id:
-                        project_purchase_orders_ids.append(expense.purchase_order_id)
+            for invoice in sales_order["invoices"]:
+                if invoice["status"] == "paid":
+                    paid_amount += Decimal(invoice["total"])
+        
+        purchase_order_cost = Decimal('0.0')
+        purchase_billed_amount = Decimal('0.0')
+        purchase_paid_amount = Decimal('0.0')
+        purchase_all_bills_paid = []
 
-            project_total_rev = 0
-            project_total_cost = 0
-            for sales_order_id in project_sales_orders_ids:
-                if sales_order_id in unique_sales_order_ids:
-                    continue
-                else:
-                    print("hey", sales_order_id)
-                    sales_order = SalesOrder.objects.get(salesorder_id=sales_order_id)
-                    for invoice in sales_order.invoices:
-                        project_total_rev += (
-                            invoice["total"] * sales_order.exchange_rate
-                        )
-                    unique_sales_order_ids.add(sales_order_id)
-
-            for purchase_order_id in project_purchase_orders_ids:
-                if purchase_order_id in unique_purchase_order_ids:
-                    continue
-                else:
-                    purchase_order = PurchaseOrder.objects.get(
-                        purchaseorder_id=purchase_order_id
-                    )
-                    for bill in purchase_order.bills:
-                        project_total_cost += (
-                            bill["total"] * purchase_order.exchange_rate
-                        )
-                    unique_purchase_order_ids.add(purchase_order_id)
-
-            # Add the total invoiced amount to the overall total_rev
-            total_rev += project_total_rev
-            total_cost += project_total_cost
+        if purchase_orders.exists():
+            for purchase_order in purchase_orders:
+                purchase_order_cost += Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
+                for bill in purchase_order.bills:
+                    purchase_billed_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                    if bill["status"] == "paid":
+                        purchase_paid_amount += Decimal(str(bill["total"]))
+                        purchase_all_bills_paid.append(True)
+                    else:
+                        purchase_all_bills_paid.append(False)
+        profit_percentage = ((total - purchase_order_cost) / total) * 100 if total > 0 else 0
 
         return Response(
             {
-                "total_revenue": total_rev,
-                "total_cost": total_cost,
-                "profit": total_rev - total_cost,
-                "profit_percentage": (
-                    (total_rev - total_cost) / total_rev * 100 if total_rev != 0 else 0
-                ),
+                "sales_order_cost": total,
+                "invoiced_amount": invoiced_amount,
+                "paid_amount": paid_amount,
+                "currency_code": currency_code,
+                "no_of_sales_orders": len(all_sales_orders),
+                "currency_symbol": currency_symbol,
+                "purchase_order_cost": purchase_order_cost,
+                "purchase_billed_amount": purchase_billed_amount,
+                "purchase_paid_amount": purchase_paid_amount,
+                "purchase_all_bills_paid": purchase_all_bills_paid,
+                "profit_generated":(total - purchase_order_cost),
+                "profit_percentage": profit_percentage,
             }
         )
     except Exception as e:
         print(str(e))
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["GET"])
