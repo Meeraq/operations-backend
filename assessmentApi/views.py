@@ -96,6 +96,8 @@ from schedularApi.tasks import (
     send_assessment_invitation_mail,
     send_whatsapp_message,
     send_assessment_invitation_mail_on_click,
+    send_email_reminder_assessment_on_click,
+    send_whatsapp_reminder_assessment_on_click,
 )
 from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -5032,6 +5034,36 @@ def send_mail_to_not_responded_participant(request, assessment_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Faild to send emails"}, status=400)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def send_email_reminder(request, assessment_id):
+    try:
+        data = {
+            "participant_observers": request.data.get("participant_observers", []),
+            "assessment_id": assessment_id,
+        }
+        send_email_reminder_assessment_on_click.delay(data)
+        return Response({"message": "Email Sent Sucessfully"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Faild to send email reminder"}, status=400)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def send_whatsapp_reminder(request, assessment_id):
+    try:
+        data = {
+            "participant_observers": request.data.get("participant_observers", []),
+            "assessment_id": assessment_id,
+        }
+        send_whatsapp_reminder_assessment_on_click.delay(data)
+        return Response({"message": "Whatsapp Sent Sucessfully"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Faild to send whatsapp reminder"}, status=400)
 
 
 def get_average_for_all_compentency(compentency_precentages):
