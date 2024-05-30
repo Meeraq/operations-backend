@@ -2744,25 +2744,26 @@ def invoice_due_email_reminder():
                         "due_date": item.custom_field_hash["cf_due_date"],
                     }
                     line_item_data.append(line_item)
-        send_mail_templates(
-            "due_invoice_email_reminder.html",
-            (
-                [
-                    "finance@meeraq.com",
-                    "kumar@coachtotransformation.com",
-                    "raju@coachtotransformation.com",
-                ]
-                if env("ENVIRONMENT") == "PRODUCTION"
-                else ["tech@meeraq.com"]
-            ),
-            "Invoices due today",
-            {"line_item_data": line_item_data},
-            (
-                ["rajat@meeraq.com", "sujata@meeraq.com"]
-                if env("ENVIRONMENT") == "PRODUCTION"
-                else ["naveen@meeraq.com"]
-            ),
-        )
+        if len(line_item_data) > 0:
+            send_mail_templates(
+                "due_invoice_email_reminder.html",
+                (
+                    [
+                        "finance@meeraq.com",
+                        "kumar@coachtotransformation.com",
+                        "raju@coachtotransformation.com",
+                    ]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["tech@meeraq.com"]
+                ),
+                "Invoices due today",
+                {"line_item_data": line_item_data},
+                (
+                    ["rajat@meeraq.com", "sujata@meeraq.com"]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),
+            )
     except Exception as e:
         print(str(e))
 
