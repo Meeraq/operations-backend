@@ -8069,6 +8069,38 @@ def get_gmsheet_by_sales(request, sales_person_id):
             {"error": "Failed to get GM Sheets for the specified salesperson."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_employee(request):
+    employee_id = request.data.get('id')
+    if not employee_id:
+        return Response({"error": "Employee ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response({"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = EmployeeSerializer(employee, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_employee(request):
+    employee_id = request.data.get('id')
+    if not employee_id:
+        return Response({"error": "Employee ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response({"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    employee.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["DELETE"])

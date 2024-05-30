@@ -264,7 +264,7 @@ class GmSheetSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = ['id','first_name', 'last_name', 'phone_number', 'email']
+        fields =  '__all__'
 
 class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
     sales_order_exists = serializers.SerializerMethodField()
