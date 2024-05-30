@@ -19,6 +19,7 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
+from django.utils import timezone
 
 import environ
 
@@ -1019,6 +1020,8 @@ class ChatHistory(models.Model):
     response = models.TextField(blank=True, null=True, default=None)
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
     is_old = models.BooleanField(blank=True,default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Chat History for {self.user}"

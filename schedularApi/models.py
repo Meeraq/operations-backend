@@ -379,7 +379,7 @@ class Assets(models.Model):
     category = models.CharField(max_length=255, default="", blank=True)
     assigned_to = models.ForeignKey(Employee, on_delete=models.SET_NULL, blank=True, null=True)
     update_at = models.DateTimeField(auto_now=True)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True,max_length=255)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
     updates = models.JSONField(default=list, blank=True)
     serial_number =models.CharField(max_length=255, default="", blank=True)
