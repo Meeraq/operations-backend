@@ -1012,3 +1012,14 @@ class UserFeedback(models.Model):
     comments = models.TextField(blank=True, default="")
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class ChatHistory(models.Model):
+    prompt = models.TextField(blank=True, null=True, default=None)
+    response = models.TextField(blank=True, null=True, default=None)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
+    is_old = models.BooleanField(blank=True,default=False)
+
+    def __str__(self):
+        return f"Chat History for {self.user}"
+
