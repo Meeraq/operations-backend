@@ -913,13 +913,20 @@ def create_asset(request):
         update_entry = {
             "date": str(datetime.now()),
             "status": instance.status,
-            "assigned_to": instance.assigned_to.id,
-            "assigned_to_name" : instance.assigned_to.first_name + " " + instance.assigned_to.last_name  
         }
+        
+        if instance.assigned_to is not None:
+            update_entry["assigned_to"] = instance.assigned_to.id
+            update_entry["assigned_to_name"] = instance.assigned_to.first_name + " " + instance.assigned_to.last_name
+        else:
+            update_entry["assigned_to"] = None
+            update_entry["assigned_to_name"] = None
+
         instance.updates.append(update_entry)
         instance.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(["GET"])
@@ -944,33 +951,44 @@ def delete_asset(request):
     asset.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 
-
 @api_view(["PUT"])
 def update_asset(request):
     payload = request.data
     values = payload.get("values")
     asset_id = payload.get("id")
+    
     if not asset_id:
         return Response(
             {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
         )
+    
     try:
         asset = Assets.objects.get(id=asset_id)
     except Assets.DoesNotExist:
         return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+    
     serializer = AssetsSerializer(
         asset, data=values, partial=True
     )  # Use partial=True for partial updates
+    
     if serializer.is_valid():
         instance = serializer.save()
+        
         update_entry = {
-            "date": str(datetime.now()),
+            "date": datetime.now().isoformat(),
             "status": instance.status,
-            "assigned_to": instance.assigned_to,
+            "assigned_to": instance.assigned_to.id if instance.assigned_to else None,
         }
+        
+        # Ensure updates field is a list before appending
+        if not isinstance(instance.updates, list):
+            instance.updates = []
+        
         instance.updates.append(update_entry)
         instance.save()
+        
         return Response(serializer.data)
+    
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -997,7 +1015,7 @@ def update_status(request):
 
         asset.status = new_status
         if new_status == "idle":
-            asset.assigned_to = ""
+            asset.assigned_to = None
 
         # Append the update to the updates field
         update_entry = {
@@ -8069,6 +8087,38 @@ def get_gmsheet_by_sales(request, sales_person_id):
             {"error": "Failed to get GM Sheets for the specified salesperson."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_employee(request):
+    employee_id = request.data.get('id')
+    if not employee_id:
+        return Response({"error": "Employee ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response({"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = EmployeeSerializer(employee, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_employee(request):
+    employee_id = request.data.get('id')
+    if not employee_id:
+        return Response({"error": "Employee ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response({"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    employee.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["DELETE"])
