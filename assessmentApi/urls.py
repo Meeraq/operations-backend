@@ -365,4 +365,12 @@ urlpatterns = [
         "get-assessment-of-coaching-project/<int:project_id>/",
         GetAssessmentOfCoachingProject.as_view(),
     ),
+    path(
+        "assessment/<int:assessment_id>/send-whatsapp-reminder/",
+        views.send_whatsapp_reminder,
+    ),
+    path(
+        "assessment/<int:assessment_id>/send-email-reminder/",
+        views.send_email_reminder,
+    ),
 ]
