@@ -42,6 +42,7 @@ from .models import (
     Leader,
     CoachProfileShare,
     UserFeedback,
+    ChatHistory,
 )
 from django.contrib.auth.models import User
 from schedularApi.models import ProjectContract, CoachContract
@@ -564,6 +565,11 @@ class CoachProfileShareSerializer(serializers.ModelSerializer):
 class UserFeedbackSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserFeedback
+        fields = "__all__"
+        
+class ChatHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatHistory
         fields = "__all__"
 
 
