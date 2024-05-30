@@ -913,13 +913,20 @@ def create_asset(request):
         update_entry = {
             "date": str(datetime.now()),
             "status": instance.status,
-            "assigned_to": instance.assigned_to.id,
-            "assigned_to_name" : instance.assigned_to.first_name + " " + instance.assigned_to.last_name  
         }
+        
+        if instance.assigned_to is not None:
+            update_entry["assigned_to"] = instance.assigned_to.id
+            update_entry["assigned_to_name"] = instance.assigned_to.first_name + " " + instance.assigned_to.last_name
+        else:
+            update_entry["assigned_to"] = None
+            update_entry["assigned_to_name"] = None
+
         instance.updates.append(update_entry)
         instance.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(["GET"])
@@ -1008,7 +1015,7 @@ def update_status(request):
 
         asset.status = new_status
         if new_status == "idle":
-            asset.assigned_to = ""
+            asset.assigned_to = None
 
         # Append the update to the updates field
         update_entry = {
