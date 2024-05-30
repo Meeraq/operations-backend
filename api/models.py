@@ -772,8 +772,10 @@ class StandardizedField(models.Model):
         ("city", "City"),
         ("country", "Country"),
         ("topic", "Topic"),
-        ("product_type", "Product Type"),
-        ("category", "Category"),
+        ("product_type","Product Type"),
+        ("category","Category"),
+        ("asset_location","Location"),
+        ("project_type","Project Type"),
     )
 
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
@@ -1020,3 +1022,4 @@ class ChatHistory(models.Model):
 
     def __str__(self):
         return f"Chat History for {self.user}"
+
