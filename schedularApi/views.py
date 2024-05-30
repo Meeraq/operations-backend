@@ -921,7 +921,7 @@ def create_asset(request):
         else:
             update_entry["assigned_to"] = None
             update_entry["assigned_to_name"] = None
-
+            
         instance.updates.append(update_entry)
         instance.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -1017,11 +1017,14 @@ def update_status(request):
         if new_status == "idle":
             asset.assigned_to = None
 
+        # Serialize the assigned_to field
+        assigned_to = asset.assigned_to.id if asset.assigned_to else None
+
         # Append the update to the updates field
         update_entry = {
             "date": str(datetime.now()),
             "status": new_status,
-            "assigned_to": asset.assigned_to,
+            "assigned_to": assigned_to,
         }
         if not hasattr(asset, "updates"):
             asset.updates = []  # Initialize if 'updates' field does not exist
@@ -1032,6 +1035,7 @@ def update_status(request):
     return Response(
         {"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
     )
+
 
 
 @api_view(["GET"])
