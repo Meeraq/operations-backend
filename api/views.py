@@ -84,6 +84,8 @@ from .serializers import (
     CoachProfileShareSerializer,
     UserFeedbackSerializer,
     ChatHistorySerializer,
+    CurriculumDepthOneSerializer,
+    CurriculumSerializer
 )
 from zohoapi.serializers import (
     VendorDepthOneSerializer,
@@ -167,6 +169,7 @@ from .models import (
     CoachProfileShare,
     UserFeedback,
     ChatHistory,
+    Curriculum,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -12846,3 +12849,4 @@ def get_prev_chat_history(request, user_id):
     serializer = ChatHistorySerializer(chat_history, many=True)
     chat_data = serializer.data
     return Response(chat_data)
+
