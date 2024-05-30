@@ -955,6 +955,7 @@ class TableHiddenColumn(models.Model):
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
 class UserFeedback(models.Model):
     user_types = [
         ("pmo", "pmo"),
@@ -964,30 +965,30 @@ class UserFeedback(models.Model):
         ("facilitator", "facilitator"),
     ]
     feedback_type_choices = [
-        ('bulk_upload_of_coach', 'Bulk Upload of Coach'),
-        ('bulk_upload_of_facilitator','Bulk Upload of Facilitator'),
-        ('bulk_upload_of_batch','Bulk Upload of Batch'),
-        ('bulk_upload_of_questions','Bulk Upload of Questions'),
-        ('bulk_upload_of_participant','Bulk Upload of Participant'),
-        ('assigning_certificate','Assigning Certificate'),
-        ('assign_the_course','Assign the Course'),
-        ('requesting_availability_of_coach','Requesting Availability of Coach'),
-        ('adding_facilitator','Adding Facilitator'),
-        ('adding_coach','Adding Coach'),
-        ('editing_coach','Editing Coach'),
-        ('editing_facilitator','Editing Facilitator'),
-        ('editing_coachee','Editing Coachee'),
-        ('video_upload_inside_lesson','Video Upload inside Lesson'),
-        ('video_upload_inside_video_library','Video Upload Inside Video Library'),
-        ('pdf_upload_inside_lesson','PDF Upload inside Lesson'),
-        ('pdf_upload_inside_pdf_library','PDF Upload Inside PDF Library'),
-        ('coach_editing_the_profile','Coach Editing the Profile'),
-        ('coach_giving_his_availability','Coach Giving his Availability'),
-        ('learner_requesting_a_session','Learner Requesting a Session'),
-        ('learner_editing_the_profile','Learner Editing the Profile'),
-        ('learner_course_engagement','Learner Course Engagement'),
-        ('facilitator_editing_profile','Facilitator Editing Profile'),
-        ('hr_downloading_report','HR Downloading Report'),
+        ("bulk_upload_of_coach", "Bulk Upload of Coach"),
+        ("bulk_upload_of_facilitator", "Bulk Upload of Facilitator"),
+        ("bulk_upload_of_batch", "Bulk Upload of Batch"),
+        ("bulk_upload_of_questions", "Bulk Upload of Questions"),
+        ("bulk_upload_of_participant", "Bulk Upload of Participant"),
+        ("assigning_certificate", "Assigning Certificate"),
+        ("assign_the_course", "Assign the Course"),
+        ("requesting_availability_of_coach", "Requesting Availability of Coach"),
+        ("adding_facilitator", "Adding Facilitator"),
+        ("adding_coach", "Adding Coach"),
+        ("editing_coach", "Editing Coach"),
+        ("editing_facilitator", "Editing Facilitator"),
+        ("editing_coachee", "Editing Coachee"),
+        ("video_upload_inside_lesson", "Video Upload inside Lesson"),
+        ("video_upload_inside_video_library", "Video Upload Inside Video Library"),
+        ("pdf_upload_inside_lesson", "PDF Upload inside Lesson"),
+        ("pdf_upload_inside_pdf_library", "PDF Upload Inside PDF Library"),
+        ("coach_editing_the_profile", "Coach Editing the Profile"),
+        ("coach_giving_his_availability", "Coach Giving his Availability"),
+        ("learner_requesting_a_session", "Learner Requesting a Session"),
+        ("learner_editing_the_profile", "Learner Editing the Profile"),
+        ("learner_course_engagement", "Learner Course Engagement"),
+        ("facilitator_editing_profile", "Facilitator Editing Profile"),
+        ("hr_downloading_report", "HR Downloading Report"),
     ]
     hr = models.ForeignKey(
         HR, on_delete=models.SET_NULL, blank=True, null=True, default=None
@@ -1009,3 +1010,13 @@ class UserFeedback(models.Model):
     comments = models.TextField(blank=True, default="")
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class ChatHistory(models.Model):
+    prompt = models.TextField(blank=True, null=True, default=None)
+    response = models.TextField(blank=True, null=True, default=None)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
+    is_old = models.BooleanField(blank=True,default=False)
+
+    def __str__(self):
+        return f"Chat History for {self.user}"
