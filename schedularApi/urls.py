@@ -32,6 +32,9 @@ urlpatterns = [
     path("gmsheet-by-sales/<int:sales_person_id>", views.get_gmsheet_by_sales),
     path('create-employee/', views.create_employee, name='employee-create'),
     path('employees/', views.get_employees, name='get_employees'),
+    path('update-employee/', views.update_employee, name='update_employee'),
+    path('delete-employee/', views.delete_employee, name='delete_employee'),
+
     path(
         "current-or-next-year/",
         views.get_current_or_next_year,

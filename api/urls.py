@@ -593,7 +593,7 @@ urlpatterns = [
     path("rewrite/", views.rewrite),
     path("user-feedback-response/", views.user_feedback_response),
     path("get-user-feedback-responses/", views.get_user_feedback_repsonses),
-    path("mira_assistant/", views.mira_assistant, name="mira_assistant"),
+    path("mira-assistant/", views.mira_assistant, name="mira_assistant"),
     path(
         "get-prev-chat-data/<int:user_id>/",
         views.get_prev_chat_data,

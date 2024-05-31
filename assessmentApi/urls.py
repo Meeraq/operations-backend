@@ -368,6 +368,14 @@ urlpatterns = [
         GetAssessmentOfCoachingProject.as_view(),
     ),
     path(
+        "assessment/<int:assessment_id>/send-whatsapp-reminder/",
+        views.send_whatsapp_reminder,
+    ),
+    path(
+        "assessment/<int:assessment_id>/send-email-reminder/",
+        views.send_email_reminder,
+    ),
+    path(
         "store-temp-password/<str:user_type>/<str:unique_id>/",
         StoreTempResponseParticipantObserver.as_view(),
     ),

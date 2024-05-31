@@ -12818,6 +12818,8 @@ def get_user_feedback_repsonses(request):
         return Response(all_user_feedback_data_serializer.data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+    
+    
 
 
 @api_view(["POST"])
@@ -12827,6 +12829,7 @@ def mira_assistant(request):
         client = OpenAI()
         prompt = request.data.get("prompt")
         user_id = request.data.get("user_id")
+        # created_at = request.data.get("created_at")
         user_instance = User.objects.get(id=user_id)
         chat_entry = ChatHistory.objects.create(prompt=prompt, user=user_instance)
         last_three_chats = list(
@@ -12840,11 +12843,15 @@ def mira_assistant(request):
             ],
         )
         chat_entry.response = completion.choices[0].message.content.strip()
+        # chat_entry.created_at = created_at
         chat_entry.save()
 
-        return Response(
-            completion.choices[0].message.content.strip(), status=status.HTTP_200_OK
-        )
+        response_data = {
+            "response": completion.choices[0].message.content.strip(),
+            "current_time": timezone.now().isoformat()  # Convert current time to ISO format
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
