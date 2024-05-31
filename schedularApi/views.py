@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from collections import defaultdict
 import uuid
 import requests
 import random
@@ -8811,3 +8812,60 @@ def batch_competency_movement(request, batch_id, competency_id):
     return Response(
         {"action_item_movement": data, "action_item_counts": action_item_counts}
     )
+
+def find_conflicting_sessions():
+    coach_conflicts = defaultdict(list)
+    current_time = timezone.now()
+    current_timestamp_ms = int(current_time.timestamp() * 1000)
+    upcoming_sessions =  SchedularSessions.objects.filter(availibility__start_time__gte=current_timestamp_ms)
+    for session in upcoming_sessions:
+        coach_id = session.availibility.coach_id
+        start_time = session.availibility.start_time
+        end_time = session.availibility.end_time
+        session_id = session.id
+        conflicting_sessions = SchedularSessions.objects.filter(
+            Q(availibility__coach_id=coach_id),
+            Q(availibility__start_time__lt=end_time, availibility__end_time__gt=start_time) |
+            Q(availibility__start_time__lt=end_time, availibility__end_time__gt=end_time) |
+            Q(availibility__start_time__lt=start_time, availibility__end_time__gt=start_time)
+        ).exclude(id=session_id)# Exclude the current session itself
+        for conflicting_session in conflicting_sessions:
+            conflicting_session_id = conflicting_session.id
+            # Ensure only one of the conflicting pairs is added
+            if conflicting_session_id not in coach_conflicts or session_id < conflicting_session_id:
+                coach_conflicts[session_id].append(conflicting_session_id)
+    result = []
+    for session_id, conflicts in coach_conflicts.items():
+        session_obj = SchedularSessions.objects.get(id=session_id)
+        session_coach_name = session_obj.availibility.coach.first_name
+        session_start_time = session_obj.availibility.start_time
+        session_end_time = session_obj.availibility.end_time
+        session_learner_name = session_obj.learner.name
+        session_details = {
+            "learner_name": session_learner_name,
+            "start_time": session_start_time,
+            "end_time": session_end_time
+        }
+        for conflict_id in conflicts:
+            conflict_obj = SchedularSessions.objects.get(id=conflict_id)
+            conflict_start_time = conflict_obj.availibility.start_time
+            conflict_end_time = conflict_obj.availibility.end_time
+            conflict_learner_name = conflict_obj.learner.name
+            conflict_details = {
+                "learner_name": conflict_learner_name,
+                "start_time": conflict_start_time,
+                "end_time": conflict_end_time
+            }
+            result.append({
+                "session": session_details,
+                "conflicting_with_session": conflict_details,
+                "coach": session_coach_name
+            })
+    return result
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_conflicting_sessions(request):
+    res = find_conflicting_sessions()
+    return Response(res)

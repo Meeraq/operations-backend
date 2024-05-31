@@ -493,4 +493,5 @@ urlpatterns = [
         "get-upcoming-past-live-session-facilitator/<int:user_id>/",
         views.get_upcoming_past_live_session_facilitator,
     ),
+    path('get-upcoming-conflicting-sessions/', views.get_upcoming_conflicting_sessions, name='get_upcoming_conflicting_sessions'),
 ]
