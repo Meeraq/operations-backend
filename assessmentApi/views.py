@@ -25,6 +25,8 @@ from .models import (
     ParticipantReleasedResults,
     BatchCompetencyAssignment,
     ProjectAssessmentMapping,
+    ObserverTempResponse,
+    ParticipantTempResponse,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -5853,5 +5855,107 @@ class GetAssessmentOfCoachingProject(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class StoreTempResponseParticipantObserver(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, user_type, unique_id):
+        try:
+
+            response = request.data.get("response")
+            active_question = request.data.get("active_question")
+            current_competency = request.data.get("current_competency")
+            if user_type == "participant":
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    unique_id=unique_id
+                )
+                participant_response, created = (
+                    ParticipantTempResponse.objects.get_or_create(
+                        participant=participant_unique_id.participant,
+                        assessment=participant_unique_id.assessment,
+                    )
+                )
+                participant_response.temp_participant_response = response
+                participant_response.active_question = active_question
+                participant_response.current_competency = current_competency
+                participant_response.save()
+
+            elif user_type == "observer":
+                observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
+
+                observer_response, created1 = (
+                    ObserverTempResponse.objects.get_or_create(
+                        participant=observer_unique_id.participant,
+                        observer=observer_unique_id.observer,
+                        assessment=observer_unique_id.assessment,
+                    )
+                )
+                observer_response.temp_observer_response = response
+                observer_response.active_question = active_question
+                observer_response.current_competency = current_competency
+                observer_response.save()
+
+            return Response(
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to save reponse status"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetTempResponseParticipantObserver(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_type, unique_id):
+        try:
+
+            temp_response = None
+            active_question = None
+            current_competency = None
+
+            if user_type == "participant":
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    unique_id=unique_id
+                )
+                participant_response = ParticipantTempResponse.objects.filter(
+                    participant=participant_unique_id.participant,
+                    assessment=participant_unique_id.assessment,
+                ).first()
+                if participant_response:
+                    temp_response = participant_response.temp_participant_response
+                    active_question = participant_response.active_question
+                    current_competency = participant_response.current_competency
+                  
+            elif user_type == "observer":
+                observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
+
+                observer_response = ObserverTempResponse.objects.filter(
+                    participant=observer_unique_id.participant,
+                    assessment=observer_unique_id.assessment,
+                    observer=observer_unique_id.observer,
+                ).first()
+                if observer_response:
+                    temp_response = observer_response.temp_observer_response
+                    active_question = observer_response.active_question
+                    current_competency = observer_response.current_competency
+
+            return Response(
+                {
+                    "temp_response": temp_response,
+                    "active_question": active_question,
+                    "current_competency": current_competency,
+                }
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

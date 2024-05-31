@@ -17,6 +17,8 @@ from .models import (
     ActionItem,
     BatchCompetencyAssignment,
     ProjectAssessmentMapping,
+    ObserverTempResponse,
+    ParticipantTempResponse,
 )
 
 # Register your models here.
@@ -39,3 +41,5 @@ admin.site.register(ParticipantReleasedResults)
 admin.site.register(ActionItem)
 admin.site.register(BatchCompetencyAssignment)
 admin.site.register(ProjectAssessmentMapping)
+admin.site.register(ObserverTempResponse)
+admin.site.register(ParticipantTempResponse)
