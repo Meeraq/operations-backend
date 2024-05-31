@@ -85,7 +85,7 @@ from .serializers import (
     UserFeedbackSerializer,
     ChatHistorySerializer,
     CurriculumDepthOneSerializer,
-    CurriculumSerializer
+    CurriculumSerializer,
 )
 from zohoapi.serializers import (
     VendorDepthOneSerializer,
@@ -208,7 +208,7 @@ from schedularApi.models import (
     Expense,
     CoachContract,
     ProjectContract,
-    Benchmark
+    Benchmark,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
@@ -1152,10 +1152,10 @@ FIELD_NAME_VALUES = {
     "city": "City",
     "country": "Country",
     "topic": "Topic",
-    "project_type":"Project Type",
-    "product_type":"Product Type",
-    "category" : "Category",
-    "asset_location": "Location"
+    "project_type": "Project Type",
+    "product_type": "Product Type",
+    "category": "Category",
+    "asset_location": "Location",
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -1648,6 +1648,8 @@ def get_user_for_active_inactive(role, email):
             user = CTTPmo.objects.get(email=email)
         if role == "leader":
             user = Leader.objects.get(email=email)
+        if role == "curriculum":
+            user = Curriculum.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -2655,6 +2657,10 @@ def get_user_data(user):
         if not user.profile.leader.active_inactive:
             return None
         serializer = LeaderDepthOneSerializer(user.profile.leader)
+    elif user_profile_role == "curriculum":
+        if not user.profile.curriculum.active_inactive:
+            return None
+        serializer = CurriculumDepthOneSerializer(user.profile.curriculum)
     else:
         return None
     return {
@@ -9039,6 +9045,7 @@ class StandardizedFieldRequestAPI(APIView):
             }
         )
 
+
 class StandardFieldAddValue(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "finance", "leader")]
 
@@ -9051,7 +9058,10 @@ class StandardFieldAddValue(APIView):
 
                 # Validate the input data
                 if not field_name or not option_value:
-                    return Response({"error": "Field name and option value are required."}, status=400)
+                    return Response(
+                        {"error": "Field name and option value are required."},
+                        status=400,
+                    )
 
                 # Get or create the StandardizedField instance for the given field_name
                 standardized_field, created = StandardizedField.objects.get_or_create(
@@ -9065,13 +9075,15 @@ class StandardFieldAddValue(APIView):
                     standardized_field.save()
 
                     # Check if the field_name is 'project_type'
-                    if field_name == 'project_type':
+                    if field_name == "project_type":
                         # Check if there are Benchmark instances
                         if not Benchmark.objects.exists():
                             # Create a Benchmark instance with the project_type key
                             Benchmark.objects.create(project_type={option_value: ""})
                             return Response(
-                                {"message": f"Benchmark created with {option_value} in project_type."},
+                                {
+                                    "message": f"Benchmark created with {option_value} in project_type."
+                                },
                                 status=200,
                             )
 
@@ -9083,25 +9095,35 @@ class StandardFieldAddValue(APIView):
                             # Update the project_type field of existing Benchmark instances
                             for benchmark in benchmarks:
                                 if not benchmark.project_type:
-                                    benchmark.project_type = {}  # Ensure project_type is a dictionary
+                                    benchmark.project_type = (
+                                        {}
+                                    )  # Ensure project_type is a dictionary
                                 benchmark.project_type[option_value] = ""
                                 benchmark.save()
 
                             return Response(
-                                {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field for the current year."},
+                                {
+                                    "message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field for the current year."
+                                },
                                 status=200,
                             )
                         else:
                             # No Benchmark instances for the current year, create one and update project_type
-                            Benchmark.objects.create(year=current_year, project_type={option_value: ""})
+                            Benchmark.objects.create(
+                                year=current_year, project_type={option_value: ""}
+                            )
                             return Response(
-                                {"message": f"Benchmark created with {option_value} in project_type for the current year."},
+                                {
+                                    "message": f"Benchmark created with {option_value} in project_type for the current year."
+                                },
                                 status=200,
                             )
 
                     # Return success response for other field names
                     return Response(
-                        {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
+                        {
+                            "message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."
+                        },
                         status=200,
                     )
 
@@ -9115,7 +9137,6 @@ class StandardFieldAddValue(APIView):
                 {"error": "Failed to add value."},
                 status=500,
             )
-
 
 
 class StandardFieldEditValue(APIView):
@@ -9144,11 +9165,13 @@ class StandardFieldEditValue(APIView):
                         standardized_field.save()
 
                         # If the field_name is 'project_type', update the corresponding key in the project_type field of Benchmark instances
-                        if field_name == 'project_type':
+                        if field_name == "project_type":
                             benchmarks = Benchmark.objects.all()
                             for benchmark in benchmarks:
                                 if previous_value in benchmark.project_type:
-                                    benchmark.project_type[new_value] = benchmark.project_type.pop(previous_value)
+                                    benchmark.project_type[new_value] = (
+                                        benchmark.project_type.pop(previous_value)
+                                    )
                                     benchmark.save()
 
                         # Return success response
@@ -9297,7 +9320,7 @@ class StandardFieldDeleteValue(APIView):
                 standardized_field = StandardizedField.objects.get(field=field_name)
 
                 # Check if the field_name is 'project_type'
-                if field_name == 'project_type':
+                if field_name == "project_type":
                     # Retrieve all Benchmark instances
                     benchmarks = Benchmark.objects.all()
                     for benchmark in benchmarks:
@@ -9336,6 +9359,7 @@ class StandardFieldDeleteValue(APIView):
                 {"error": "Failed to delete value."},
                 status=500,
             )
+
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
@@ -10061,6 +10085,10 @@ def change_user_role(request, user_id):
         if not user.profile.leader.active_inactive:
             return None
         serializer = LeaderDepthOneSerializer(user.profile.leader)
+    elif user_profile_role == "curriculum":
+        if not user.profile.curriculum.active_inactive:
+            return None
+        serializer = CurriculumDepthOneSerializer(user.profile.curriculum)
     else:
         return Response({"error": "Unknown user role."}, status=400)
     return Response(
@@ -12790,6 +12818,8 @@ def get_user_feedback_repsonses(request):
         return Response(all_user_feedback_data_serializer.data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def mira_assistant(request):
@@ -12850,3 +12880,89 @@ def get_prev_chat_history(request, user_id):
     chat_data = serializer.data
     return Response(chat_data)
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def add_curriculum(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            curriculum_serializer = CurriculumSerializer(data=data)
+            if curriculum_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email", "").strip().lower()
+                phone = data.get("phone")
+
+                if not (name and phone and email):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                curriculum_role, created = Role.objects.get_or_create(name="curriculum")
+                profile.roles.add(curriculum_role)
+                profile.save()
+                curriculum_serializer.save(user=profile)
+                return Response(
+                    curriculum_serializer.data, status=status.HTTP_201_CREATED
+                )
+            else:
+                return Response(
+                    curriculum_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def get_curriculums(request):
+    try:
+        curriculums = Curriculum.objects.all()
+        serializer = CurriculumSerializer(curriculums, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny, IsInRoles("superadmin")])
+def edit_curriculum(request, curriculum_id):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    curriculum = Curriculum.objects.get(id=curriculum_id)
+    try:
+        with transaction.atomic():
+            existing_user = (
+                User.objects.filter(username=email)
+                .exclude(username=curriculum.user.user.username)
+                .first()
+            )
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            curriculum.user.user.username = email
+            curriculum.user.user.email = email
+            curriculum.user.user.save()
+            curriculum.email = email
+            curriculum.name = name
+            curriculum.phone = phone
+            curriculum.save()
+            return Response({"message": "Curriculum updated successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update curriculum."}, status=500)
