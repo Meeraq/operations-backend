@@ -198,11 +198,40 @@ class ParticipantResponse(models.Model):
         )
 
 
+class ParticipantTempResponse(models.Model):
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
+    temp_participant_response = models.JSONField(default=dict, blank=True)
+    active_question = models.IntegerField(blank=True, default=0, null=True)
+    current_competency = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return (
+            f"Response for {self.participant.name} in Assessment {self.assessment.name}"
+        )
+
+
 class ObserverResponse(models.Model):
     participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
     observer = models.ForeignKey(Observer, on_delete=models.CASCADE, blank=True)
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
     observer_response = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Response for Observer {self.observer.name} in Assessment {self.assessment.name} participant is {self.participant.name}"
+
+
+class ObserverTempResponse(models.Model):
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
+    observer = models.ForeignKey(Observer, on_delete=models.CASCADE, blank=True)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
+    temp_observer_response = models.JSONField(default=dict, blank=True)
+    active_question = models.IntegerField(blank=True, default=0, null=True)
+    current_competency = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

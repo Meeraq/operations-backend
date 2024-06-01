@@ -546,6 +546,9 @@ urlpatterns = [
     path("leaders/", views.get_leaders),
     path("leaders/create/", views.add_leader),
     path("leaders/edit/<int:leader_id>/", views.edit_leader),
+    path("curriculum/", views.get_curriculums),
+    path("curriculum/create/", views.add_curriculum),
+    path("curriculum/edit/<int:curriculum_id>/", views.edit_curriculum),
     path(
         "create-new-engagement/",
         views.create_engagement_of_learner,

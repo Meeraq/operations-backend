@@ -43,6 +43,8 @@ from .models import (
     CoachProfileShare,
     UserFeedback,
     ChatHistory,
+    Curriculum,
+   
 )
 from django.contrib.auth.models import User
 from schedularApi.models import ProjectContract, CoachContract
@@ -500,10 +502,20 @@ class LeaderSerializer(serializers.ModelSerializer):
         model = Leader
         fields = "__all__"
 
+class CurriculumSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Curriculum
+        fields = "__all__"
 
 class LeaderDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Leader
+        fields = "__all__"
+        depth = 1
+
+class CurriculumDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Curriculum
         fields = "__all__"
         depth = 1
 
