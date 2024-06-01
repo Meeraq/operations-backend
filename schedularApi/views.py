@@ -3569,10 +3569,6 @@ def edit_session_status(request, session_id):
         return Response({"error": "Status is required."}, status=400)
     session.status = new_status
     session.save()
-    tasks = Task.objects.filter(
-        task="schedular_update_session_status", status="pending", caas_project=project
-    )
-    tasks.update(status="completed")
     return Response({"message": "Session status updated successfully."}, status=200)
 
 
