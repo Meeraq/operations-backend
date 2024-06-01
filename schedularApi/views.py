@@ -1164,6 +1164,7 @@ def create_coach_pricing(batch, coach):
         if session["session_type"] in [
             "laser_coaching_session",
             "mentoring_session",
+            "action_coaching_session"
         ]:
             coaching_session = CoachingSession.objects.filter(
                 batch=batch,
@@ -1247,42 +1248,13 @@ def create_batch_calendar(batch):
                 },
                 3,
             )
-        elif session_type == "laser_coaching_session":
+        elif session_type in ["laser_coaching_session"]:
             coaching_session_number = (
                 CoachingSession.objects.filter(
                     batch=batch, session_type=session_type
                 ).count()
                 + 1
             )
-            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-            coaching_session = CoachingSession.objects.create(
-                batch=batch,
-                coaching_session_number=coaching_session_number,
-                order=order,
-                duration=duration,
-                booking_link=booking_link,
-                session_type=session_type,
-            )
-            create_task(
-                {
-                    "task": "add_dates",
-                    "schedular_project": batch.project.id,
-                    "project_type": "skill_training",
-                    "coaching_session": coaching_session.id,
-                    "priority": "medium",
-                    "status": "pending",
-                    "remarks": [],
-                },
-                7,
-            )
-        elif session_type == "mentoring_session":
-            coaching_session_number = (
-                CoachingSession.objects.filter(
-                    batch=batch, session_type=session_type
-                ).count()
-                + 1
-            )
-
             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
             coaching_session = CoachingSession.objects.create(
                 batch=batch,
@@ -2711,7 +2683,7 @@ def schedule_session(request):
                     (
                         "Meeraq - Laser Coaching Session Booked"
                         if session_type == "laser_coaching_session"
-                        else "Meeraq - Mentoring Session Booked"
+                        else "Meeraq - Mentoring Session Booked" if session_type == "mentoring_session" else "Meeraq - Action Coaching Booked" if session_type == "action_coaching_session" else "Meeraq - Session Booked"
                     ),
                     {
                         "name": learner.name,
@@ -2719,9 +2691,7 @@ def schedule_session(request):
                         "time": session_time,
                         "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
                         "session_type": (
-                            "Mentoring"
-                            if session_type == "mentoring_session"
-                            else "Laser Coaching"
+                            "Mentoring" if session_type == "mentoring_session" else "Action Coaching" if session_type == "action_coaching_session" else  "Laser Coaching"
                         ),
                     },
                     [],
@@ -2936,7 +2906,7 @@ def schedule_session_fixed(request):
                 session_type_value = (
                     "coaching"
                     if session_type == "laser_coaching_session"
-                    else "mentoring"
+                    else "mentoring" if session_type == "mentoring_session" else "action coaching" if session_type == "action_coaching_session" else ""
                 )
                 booking_id = coach_availability.coach.room_id
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
@@ -3061,7 +3031,7 @@ def schedule_session_fixed(request):
                         (
                             "Meeraq - Laser Coaching Session Booked"
                             if session_type == "laser_coaching_session"
-                            else "Meeraq - Mentoring Session Booked"
+                            else "Meeraq - Mentoring Session Booked" if session_type == "mentoring_session" else "Meeraq - Action Coaching Booked" if session_type == "action_coaching_session" else "Meeraq - Session Booked"
                         ),
                         {
                             "name": learner.name,
@@ -3069,9 +3039,7 @@ def schedule_session_fixed(request):
                             "time": session_time,
                             "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
                             "session_type": (
-                                "Mentoring"
-                                if session_type == "mentoring_session"
-                                else "Laser Coaching"
+                                "Mentoring" if session_type == "mentoring_session" else "Action Coaching" if session_type == "action_coaching_session" else  "Laser Coaching"
                             ),
                         },
                         [],
@@ -3230,7 +3198,7 @@ def reschedule_session(request, session_id):
                 session_type_value = (
                     "coaching"
                     if session_type == "laser_coaching_session"
-                    else "mentoring"
+                    else "mentoring" if session_type == "mentoring_session" else "action coaching" if session_type == "action_coaching_session" else ""
                 )
 
                 booking_id = coach_availability.coach.room_id
@@ -3341,7 +3309,7 @@ def reschedule_session(request, session_id):
                         (
                             "Meeraq - Laser Coaching Session Booked"
                             if session_type == "laser_coaching_session"
-                            else "Meeraq - Mentoring Session Booked"
+                            else "Meeraq - Mentoring Session Booked" if session_type == "mentoring_session" else "Meeraq - Action Coaching Booked" if session_type == "action_coaching_session" else "Meeraq - Session Booked"
                         ),
                         {
                             "name": learner.name,
@@ -3349,9 +3317,7 @@ def reschedule_session(request, session_id):
                             "time": session_time,
                             "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
                             "session_type": (
-                                "Mentoring"
-                                if session_type == "mentoring_session"
-                                else "Laser Coaching"
+                                "Mentoring" if session_type == "mentoring_session" else "Action Coaching" if session_type == "action_coaching_session" else  "Laser Coaching"
                             ),
                         },
                         [],
@@ -4061,8 +4027,11 @@ def project_batch_wise_report_download(request, project_id, session_to_download)
             elif isinstance(session, CoachingSession):
                 if session.session_type == "laser_coaching_session":
                     session_type_name = "Laser Coaching Session"
-                else:
+                elif session.session_type == "mentoring_session":
                     session_type_name = "Mentoring Session"
+                elif session.session_type == "action_coaching_session":
+                    session_type_name = "Action Coaching Session"
+                
                 session_name = f"{session_type_name} {session.coaching_session_number}"
                 attendance = SchedularSessions.objects.filter(
                     coaching_session=session, status="completed"
@@ -4163,6 +4132,8 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
                 session_name = "Laser coaching"
             elif session.session_type == "mentoring_session":
                 session_name = "Mentoring session"
+            elif session.session_type == "action_coaching_session":
+                session_name = "Action Coaching session"
             session_key = f"{session_name} {session.coaching_session_number}"
             if session_key not in dfs:
                 dfs[session_key] = []
@@ -5362,7 +5333,7 @@ def add_new_session_in_project_structure(request):
                             add_question_to_feedback_lesson(
                                 feedback_lesson, nps_default_feed_questions
                             )
-                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                elif session_type in ["laser_coaching_session", "mentoring_session", "action_coaching_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
                             batch=batch, session_type=session_type
@@ -5404,6 +5375,8 @@ def add_new_session_in_project_structure(request):
                             session_name = "Laser coaching"
                         elif coaching_session.session_type == "mentoring_session":
                             session_name = "Mentoring session"
+                        elif coaching_session.session_type == "action_coaching_session":
+                            session_name = "Action Coaching Session"
                         new_lesson = Lesson.objects.create(
                             course=course,
                             name=f"{session_name} {coaching_session.coaching_session_number}",
@@ -5551,7 +5524,7 @@ def delete_session_from_project_structure(request):
                             lesson.delete()
                         live_session.delete()
 
-                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                elif session_type in ["laser_coaching_session", "mentoring_session", "action_coaching_session"]:
                     coaching_session = CoachingSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
                     ).first()
@@ -5642,7 +5615,7 @@ def delete_session_from_project_structure(request):
                                         feedback_lesson.lesson.save()
                                         feedback_lesson.save()
 
-                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                elif session_type in ["laser_coaching_session", "mentoring_session", "action_coaching_session"]:
                     for lesson in Lesson.objects.filter(
                         course=course, lesson_type="laser_coaching"
                     ):
@@ -5916,6 +5889,7 @@ def delete_coach_from_that_batch(request):
                     if session["session_type"] in [
                         "laser_coaching_session",
                         "mentoring_session",
+                        "action_coaching_session"
                     ]:
                         coaching_session = CoachingSession.objects.filter(
                             batch=batch,
@@ -6572,7 +6546,7 @@ def update_price_in_project_structure(request):
                 if facilitator_pricing:
                     facilitator_pricing.price = price
                     facilitator_pricing.save()
-        elif session_type in ["laser_coaching_session", "mentoring_session"]:
+        elif session_type in ["laser_coaching_session", "mentoring_session", "action_coaching_session"]:
             coach_pricings = CoachPricing.objects.filter(
                 project_id=project_id, session_type=session_type, order=order
             )
@@ -6864,6 +6838,7 @@ def get_project_wise_progress_data(request, project_id):
                     elif session_type in [
                         "laser_coaching_session",
                         "mentoring_session",
+                        "action_coaching_session"
                     ]:
                         coaching_session = CoachingSession.objects.filter(
                             batch=batch,
@@ -6980,6 +6955,7 @@ def get_session_progress_data_for_dashboard(request, project_id):
                 elif session_type in [
                     "laser_coaching_session",
                     "mentoring_session",
+                    "action_coaching_session"
                 ]:
                     total_count += 1
                     coaching_session = CoachingSession.objects.filter(
