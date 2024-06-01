@@ -2796,6 +2796,20 @@ def schedule_session_fixed(request):
             request_id = request.data.get("request_id", "")
             request_avail = RequestAvailibilty.objects.get(id=request_id)
             coach = Coach.objects.get(id=coach_id)
+            existing_session_of_coach_at_same_time = SchedularSessions.objects.filter(
+                Q(availibility__coach__id=coach_id),
+                Q(availibility__start_time__lt=end_time, availibility__end_time__gt=timestamp) |
+                Q(availibility__start_time__lt=end_time, availibility__end_time__gt=end_time) |
+                Q(availibility__start_time__lt=timestamp, availibility__end_time__gt=timestamp) |
+                Q(availibility__start_time=timestamp, availibility__end_time=end_time) 
+            )
+            if existing_session_of_coach_at_same_time.exists():
+                return Response(
+                    {
+                        "error": "Sorry! This slot has just been booked. Please refresh and try selecting a different time."
+                    },
+                    status=401,
+                ) 
             if not check_if_selected_slot_can_be_booked(coach_id, timestamp, end_time):
                 return Response(
                     {
@@ -8827,7 +8841,8 @@ def find_conflicting_sessions():
             Q(availibility__coach_id=coach_id),
             Q(availibility__start_time__lt=end_time, availibility__end_time__gt=start_time) |
             Q(availibility__start_time__lt=end_time, availibility__end_time__gt=end_time) |
-            Q(availibility__start_time__lt=start_time, availibility__end_time__gt=start_time)
+            Q(availibility__start_time__lt=start_time, availibility__end_time__gt=start_time) |
+            Q(availibility__start_time=start_time, availibility__end_time=end_time) 
         ).exclude(id=session_id)# Exclude the current session itself
         for conflicting_session in conflicting_sessions:
             conflicting_session_id = conflicting_session.id
