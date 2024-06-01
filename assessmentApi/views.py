@@ -3878,7 +3878,7 @@ class PrePostReportDownloadForParticipant(APIView):
             encoded_image = None
             compentency_with_description = None
 
-            if assessment.assessment_timing == "pre":
+            if assessment.assessment_timing == "pre" or assessment.assessment_timing == "none":
                 (
                     encoded_image,
                     compentency_with_description,
@@ -3941,7 +3941,7 @@ class PrePostReportDownloadForAllParticipant(APIView):
                 encoded_image = None
                 compentency_with_description = None
 
-                if assessment.assessment_timing == "pre":
+                if assessment.assessment_timing == "pre" or assessment.assessment_timing == "none" :
                     (
                         encoded_image,
                         compentency_with_description,
