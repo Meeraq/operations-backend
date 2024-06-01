@@ -8266,6 +8266,28 @@ def edit_action_item(request, pk):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def add_remark_to_action_item(request, pk):
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "PUT":
+        remark = request.data.get("remark")
+        if not remark:
+            return Response(
+                {"error": "No remark found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        action_item.remarks.append(
+            {"text": remark, "created_at": str(timezone.now())}
+        )
+        action_item.save()
+        serializer = ActionItemSerializer(action_item)
+        return Response(serializer.data)
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_action_item_status(request, pk):
     try:
         action_item = ActionItem.objects.get(pk=pk)
