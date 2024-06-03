@@ -4649,7 +4649,7 @@ class GetParticipantReleasedResults(APIView):
             participant_released_results = ParticipantReleasedResults.objects.filter(
                 assessment__id=assessment_id
             ).first()
-
+            
             serializer = ParticipantReleasedResultsSerializerDepthOne(
                 participant_released_results
             )
