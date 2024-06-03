@@ -1150,7 +1150,37 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
-            serializer = AssessmentAnsweredSerializerDepthFour(assessment)
+
+            if assessment.assessment_timing != "none" and assessment.automated_result:
+                encoded_image = None
+                compentency_with_description = None
+                if assessment.assessment_timing == "pre":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant(
+                        participant, assessment_id, assessment
+                    )
+                elif assessment.assessment_timing == "post":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant_for_post_assessment(
+                        participant, assessment_id, assessment
+                    )
+                send_mail_templates(
+                    "assessment/air_india_report_mail.html",
+                    [participant.email],
+                    "Meeraq Assessment Report",
+                    {
+                        "name": participant.name.title(),
+                        "image_base64": encoded_image,
+                        "compentency_with_description": compentency_with_description,
+                        "assessment_timing": assessment.assessment_timing,
+                        "assessment_name": assessment.participant_view_name,
+                    },
+                    [],
+                )
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -3878,7 +3908,10 @@ class PrePostReportDownloadForParticipant(APIView):
             encoded_image = None
             compentency_with_description = None
 
-            if assessment.assessment_timing == "pre" or assessment.assessment_timing == "none":
+            if (
+                assessment.assessment_timing == "pre"
+                or assessment.assessment_timing == "none"
+            ):
                 (
                     encoded_image,
                     compentency_with_description,
@@ -3941,7 +3974,10 @@ class PrePostReportDownloadForAllParticipant(APIView):
                 encoded_image = None
                 compentency_with_description = None
 
-                if assessment.assessment_timing == "pre" or assessment.assessment_timing == "none" :
+                if (
+                    assessment.assessment_timing == "pre"
+                    or assessment.assessment_timing == "none"
+                ):
                     (
                         encoded_image,
                         compentency_with_description,
@@ -4182,6 +4218,112 @@ class ReleaseResults(APIView):
                             },
                             [],
                         )
+                        sleep(3)
+            else:
+                assessment.result_released = True
+                assessment.save()
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(
+                {
+                    "success": "Successfully Released Results",
+                    "assessment_data": serializer.data,
+                }
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to Release Results"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AutomateResultChange(APIView):
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+
+    def put(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            if assessment.automated_result:
+                assessment.automated_result = False
+            else:
+                assessment.automated_result = True
+            assessment.save()
+            if (
+                assessment.assessment_timing == "pre"
+                or assessment.assessment_timing == "post"
+            ) and assessment.automated_result:
+                (
+                    participant_released_results,
+                    created,
+                ) = ParticipantReleasedResults.objects.get_or_create(
+                    assessment=assessment
+                )
+                participant_with_released_results = []
+                if not created:
+                    participant_with_released_results = (
+                        participant_released_results.participants.all()
+                    )
+
+                participant_with_not_released_results = []
+                for participant_observer in assessment.participants_observers.all():
+                    participant_response_present = ParticipantResponse.objects.filter(
+                        assessment=assessment,
+                        participant=participant_observer.participant,
+                    ).exists()
+                    if participant_response_present:
+                        if (
+                            participant_observer.participant
+                            not in participant_with_released_results
+                        ):
+                            participant_with_not_released_results.append(
+                                participant_observer.participant
+                            )
+                            participant_released_results.participants.add(
+                                participant_observer.participant
+                            )
+
+                participant_released_results.save()
+
+                if len(assessment.participants_observers.all()) == (
+                    len(participant_with_released_results)
+                    + len(participant_with_not_released_results)
+                ):
+                    assessment.result_released = True
+                    assessment.save()
+
+                if assessment.assessment_timing != "none":
+                    for participant in participant_with_not_released_results:
+                        encoded_image = None
+                        compentency_with_description = None
+                        if assessment.assessment_timing == "pre":
+                            (
+                                encoded_image,
+                                compentency_with_description,
+                            ) = generate_graph_for_participant(
+                                participant, assessment_id, assessment
+                            )
+                        elif assessment.assessment_timing == "post":
+                            (
+                                encoded_image,
+                                compentency_with_description,
+                            ) = generate_graph_for_participant_for_post_assessment(
+                                participant, assessment_id, assessment
+                            )
+                        send_mail_templates(
+                            "assessment/air_india_report_mail.html",
+                            [participant.email],
+                            "Meeraq Assessment Report",
+                            {
+                                "name": participant.name.title(),
+                                "image_base64": encoded_image,
+                                "compentency_with_description": compentency_with_description,
+                                "assessment_timing": assessment.assessment_timing,
+                                "assessment_name": assessment.participant_view_name,
+                            },
+                            [],
+                        )
+                        sleep(3)
             else:
                 assessment.result_released = True
                 assessment.save()
@@ -4649,7 +4791,7 @@ class GetParticipantReleasedResults(APIView):
             participant_released_results = ParticipantReleasedResults.objects.filter(
                 assessment__id=assessment_id
             ).first()
-            
+
             serializer = ParticipantReleasedResultsSerializerDepthOne(
                 participant_released_results
             )
@@ -5932,7 +6074,7 @@ class GetTempResponseParticipantObserver(APIView):
                     temp_response = participant_response.temp_participant_response
                     active_question = participant_response.active_question
                     current_competency = participant_response.current_competency
-                  
+
             elif user_type == "observer":
                 observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
 
