@@ -2473,7 +2473,6 @@ def get_coach_availabilities_booking_link(request):
 
             session_duration = coaching_session.duration
             session_type = coaching_session.session_type
-
             coaches_in_batch = coaching_session.batch.coaches.all()
             start_date = datetime.combine(
                 coaching_session.start_date, datetime.min.time()
@@ -2500,6 +2499,15 @@ def get_coach_availabilities_booking_link(request):
                 if coaching_session_id
                 else None
             )
+            
+            language_coaches = {}
+            for coach_instance in coaches_in_batch:
+                for language in coach_instance.language:
+                    if language in language_coaches:
+                        language_coaches[language].append(coach_instance.id)
+                    else:
+                        language_coaches[language] = [coach_instance.id]
+            
             return Response(
                 {
                     "project_status": coaching_session.batch.project.status,
@@ -2507,6 +2515,7 @@ def get_coach_availabilities_booking_link(request):
                     "session_duration": session_duration,
                     "session_type": session_type,
                     "coaches": coaches_serializer.data if coaches_serializer else None,
+                    "language_coaches" : language_coaches
                 }
             )
         except Exception as e:
