@@ -978,6 +978,7 @@ def update_asset(request):
             "date": datetime.now().isoformat(),
             "status": instance.status,
             "assigned_to": instance.assigned_to.id if instance.assigned_to else None,
+            "assigned_to_name": f"{instance.assigned_to.first_name} {instance.assigned_to.last_name}" if instance.assigned_to else None,
         }
         
         # Ensure updates field is a list before appending
@@ -987,10 +988,11 @@ def update_asset(request):
         instance.updates.append(update_entry)
         instance.save()
         
-        return Response(serializer.data)
+        # Use AssetsDetailedSerializer to include assigned_to_name in the response
+        detailed_serializer = AssetsDetailedSerializer(instance)
+        return Response(detailed_serializer.data)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 @api_view(["PUT"])
 def update_status(request):
@@ -3670,7 +3672,7 @@ def get_requests_of_coach(request, coach_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach")])
+@permission_classes([IsAuthenticated, IsInRoles("coach","pmo")])
 def get_slots_of_request(request, request_id):
     coach_id = request.GET.get("coach_id")
     if coach_id:
