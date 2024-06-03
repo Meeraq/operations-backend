@@ -1769,9 +1769,6 @@ def celery_send_unbooked_coaching_session_mail(data):
                     "project_name": project_name,
                     "event_link": booking_link,
                     "expiry_date": formatted_date,
-                    # "session_type": "mentoring"
-                    # if session_type == "mentoring_session"
-                    # else "laser coaching",
                 },
                 [],
             )
@@ -2181,7 +2178,7 @@ def send_tomorrow_action_items_data():
                     == "laser_coaching_session"
                 ):
                     projects_data[project.name]["laser_coaching_sessions"].append(temp)
-                else:
+                elif schedular_session.coaching_session.session_type == "mentoring_session":
                     projects_data[project.name]["mentoring_sessions"].append(temp)
 
             live_sessions = get_live_session_according_to_time(
@@ -3030,8 +3027,7 @@ def create_batch_calendar(batch):
                 },
                 3,
             )
-
-        elif session_type == "laser_coaching_session":
+        elif session_type in ["laser_coaching_session", "mentoring_session", "action_coaching_session"]:
             coaching_session_number = (
                 CoachingSession.objects.filter(
                     batch=batch, session_type=session_type
@@ -3059,37 +3055,6 @@ def create_batch_calendar(batch):
                 },
                 7,
             )
-
-        elif session_type == "mentoring_session":
-            coaching_session_number = (
-                CoachingSession.objects.filter(
-                    batch=batch, session_type=session_type
-                ).count()
-                + 1
-            )
-
-            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-            coaching_session = CoachingSession.objects.create(
-                batch=batch,
-                coaching_session_number=coaching_session_number,
-                order=order,
-                duration=duration,
-                booking_link=booking_link,
-                session_type=session_type,
-            )
-            create_task(
-                {
-                    "task": "add_dates",
-                    "schedular_project": batch.project.id,
-                    "project_type": "skill_training",
-                    "coaching_session": coaching_session.id,
-                    "priority": "medium",
-                    "status": "pending",
-                    "remarks": [],
-                },
-                7,
-            )
-
 
 @shared_task
 def add_batch_to_project(data):
