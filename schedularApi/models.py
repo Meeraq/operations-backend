@@ -118,6 +118,7 @@ class CoachingSession(models.Model):
     SESSION_CHOICES = [
         ("laser_coaching_session", "Laser Coaching Session"),
         ("mentoring_session", "Mentoring Session"),
+        ("action_coaching_session", "Action Coaching Session")
     ]
     booking_link = models.CharField(max_length=500, blank=True, default="")
     start_date = models.DateField(blank=True, null=True)
@@ -288,6 +289,7 @@ class CoachPricing(models.Model):
     SESSION_CHOICES = [
         ("laser_coaching_session", "Laser Coaching Session"),
         ("mentoring_session", "Mentoring Session"),
+        ("action_coaching_session", "Action Coaching Session")
     ]
 
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
