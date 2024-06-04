@@ -650,7 +650,9 @@ def create_new_nudge(request):
 def get_all_nudge_resources(request):
 
     nudges = NudgeResources.objects.annotate(
-        nudge_names=ArrayAgg("nudge__batch__project__name", distinct=True, output_field=CharField())
+        nudge_names=ArrayAgg(
+            "nudge__batch__project__name", distinct=True, output_field=CharField()
+        )
     )
 
     serializer = NudgeResourcesSerializerDepthOne(nudges, many=True)
