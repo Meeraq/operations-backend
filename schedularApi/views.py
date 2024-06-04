@@ -2778,11 +2778,10 @@ def schedule_session_fixed(request):
             request_avail = RequestAvailibilty.objects.get(id=request_id)
             coach = Coach.objects.get(id=coach_id)
             existing_session_of_coach_at_same_time = SchedularSessions.objects.filter(
-                Q(availibility__coach__id=coach_id),
-                Q(availibility__start_time__lt=end_time, availibility__end_time__gt=timestamp) |
-                Q(availibility__start_time__lt=end_time, availibility__end_time__gt=end_time) |
-                Q(availibility__start_time__lt=timestamp, availibility__end_time__gt=timestamp) |
-                Q(availibility__start_time=timestamp, availibility__end_time=end_time) 
+                Q(availibility__coach_id=coach_id),
+                Q(availibility__start_time__gt=timestamp, availibility__start_time__lte=end_time) |
+                Q(availibility__start_time__lt=timestamp, availibility__end_time__gte=timestamp) |
+                Q(availibility__start_time=timestamp) | Q(availibility__end_time=end_time) 
             )
             if existing_session_of_coach_at_same_time.exists():
                 return Response(
@@ -8830,6 +8829,7 @@ def batch_competency_movement(request, batch_id, competency_id):
     return Response(
         {"action_item_movement": data, "action_item_counts": action_item_counts}
     )
+
 def find_conflicting_sessions():
     coach_conflicts = defaultdict(list)
     current_time = timezone.now()
@@ -8840,13 +8840,15 @@ def find_conflicting_sessions():
         start_time = session.availibility.start_time
         end_time = session.availibility.end_time
         session_id = session.id
+
+
         conflicting_sessions = SchedularSessions.objects.filter(
             Q(availibility__coach_id=coach_id),
-            Q(availibility__start_time__lt=end_time, availibility__end_time__gt=start_time) |
-            Q(availibility__start_time__lt=end_time, availibility__end_time__gt=end_time) |
-            Q(availibility__start_time__lt=start_time, availibility__end_time__gt=start_time) |
-            Q(availibility__start_time=start_time, availibility__end_time=end_time) 
+            Q(availibility__start_time__gt=start_time, availibility__start_time__lte=end_time) |
+            Q(availibility__start_time__lt=start_time, availibility__end_time__gte=start_time) |
+            Q(availibility__start_time=start_time) | Q(availibility__end_time=end_time) 
         ).exclude(id=session_id)# Exclude the current session itself
+        
         for conflicting_session in conflicting_sessions:
             conflicting_session_id = conflicting_session.id
             # Ensure only one of the conflicting pairs is added
@@ -8875,6 +8877,7 @@ def find_conflicting_sessions():
                 "end_time": conflict_end_time
             }
             result.append({
+                "id" : conflict_id,
                 "session": session_details,
                 "conflicting_with_session": conflict_details,
                 "coach": session_coach_name
