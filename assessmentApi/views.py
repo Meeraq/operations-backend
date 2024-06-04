@@ -100,6 +100,11 @@ from schedularApi.tasks import (
     send_assessment_invitation_mail_on_click,
     send_email_reminder_assessment_on_click,
     send_whatsapp_reminder_assessment_on_click,
+    automate_result_change,
+    generate_graph_for_participant,
+    generate_graph_for_participant_for_post_assessment,
+    generate_graph_for_pre_assessment,
+    generate_graph_for_pre_post_assessment,
 )
 from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -1150,7 +1155,37 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
-            serializer = AssessmentAnsweredSerializerDepthFour(assessment)
+
+            if assessment.assessment_timing != "none" and assessment.automated_result:
+                encoded_image = None
+                compentency_with_description = None
+                if assessment.assessment_timing == "pre":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant(
+                        participant, assessment_id, assessment
+                    )
+                elif assessment.assessment_timing == "post":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant_for_post_assessment(
+                        participant, assessment_id, assessment
+                    )
+                send_mail_templates(
+                    "assessment/air_india_report_mail.html",
+                    [participant.email],
+                    "Meeraq Assessment Report",
+                    {
+                        "name": participant.name.title(),
+                        "image_base64": encoded_image,
+                        "compentency_with_description": compentency_with_description,
+                        "assessment_timing": assessment.assessment_timing,
+                        "assessment_name": assessment.participant_view_name,
+                    },
+                    [],
+                )
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -3358,63 +3393,6 @@ def swap_positions(length):
     return swapped_dict
 
 
-def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp):
-    comp_labels = list(competency_percentage.keys())
-    percentage_values = list(competency_percentage.values())
-    colors1 = ["#eb0081", "#d1cdcd"]
-    colors2 = ["#b91689", "#d1cdcd"]
-    colors3 = ["#7a3191", "#d1cdcd"]
-    colors4 = ["#374e9c", "#d1cdcd"]
-
-    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
-    ax = fig.add_subplot(111)
-
-    bottom = np.zeros(len(comp_labels))
-    bar_positions = np.arange(len(comp_labels))
-    for i in range(len(comp_labels)):
-        color_index = i % 4  # Use modulo to repeat colors after every four bars
-
-        if color_index == 0:
-            color = colors1
-        elif color_index == 1:
-            color = colors2
-        elif color_index == 2:
-            color = colors3
-        else:
-            color = colors4
-
-        ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
-
-    for index, value in enumerate(percentage_values):
-        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index],
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
-        )
-    ax.set_yticks(bar_positions)
-    ax.set_yticklabels(
-        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-        fontweight="bold",
-        fontsize=14,
-    )
-    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-    plt.xlim(0, 100)
-    plt.xlabel("Percentage")
-    plt.tight_layout()
-
-    image_stream = io.BytesIO()
-    plt.savefig(image_stream, format="png")
-    plt.close()
-
-    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
-
-    return encoded_image
-
-
 def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each_comp):
     comp_labels = list(competency_percentage.keys())
     percentage_values = list(competency_percentage.values())
@@ -3479,80 +3457,6 @@ def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each
     return encoded_image
 
 
-def generate_graph_for_pre_post_assessment(
-    pre_competency_percentage, competency_percentage, total_for_each_comp
-):
-    comp_labels = list(competency_percentage.keys())
-    pre_percentage_values = list(pre_competency_percentage.values())
-    post_percentage_values = list(competency_percentage.values())
-
-    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
-    ax = fig.add_subplot(111)
-
-    width = 0.4  # Width of each bar
-    bar_positions = np.arange(len(comp_labels))
-
-    # Plot pre-assessment values
-    pre_bars = ax.barh(
-        bar_positions - width / 2,
-        pre_percentage_values,
-        height=width,
-        label="Pre-Assessment",
-        color="#eb0081",
-    )
-
-    # Plot post-assessment values
-    post_bars = ax.barh(
-        bar_positions + width / 2,
-        post_percentage_values,
-        height=width,
-        label="Post-Assessment",
-        color="#374e9c",
-    )
-
-    ax.set_yticks(bar_positions)
-    ax.set_yticklabels(comp_labels)
-    ax.legend()
-    ax.set_yticklabels(
-        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-        fontweight="bold",
-    )
-    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-    plt.xlabel("Percentage")
-    plt.xlim(0, 100)
-    plt.tight_layout()
-
-    # Add numbers on top of the pre-assessment bars
-    for index, value in enumerate(pre_percentage_values):
-        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index] - width / 2,
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
-        )
-
-    # Add numbers on top of the post-assessment bars
-    for index, value in enumerate(post_percentage_values):
-        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index] + width / 2,
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
-        )
-
-    image_stream = io.BytesIO()
-    plt.savefig(image_stream, format="png")
-    plt.close()
-
-    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
-
-    return encoded_image
 
 
 def generate_spider_web_for_pre_post_assessment(
@@ -3633,232 +3537,6 @@ def generate_spider_web_for_pre_post_assessment(
     return encoded_image
 
 
-def generate_graph_for_participant(
-    participant, assessment_id, assessment, project_wise=False
-):
-    participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment_id
-    ).first()
-
-    if participant_response:
-        total_for_each_comp = {}
-        compentency_with_description = []
-
-        for competency in assessment.questionnaire.questions.values(
-            "competency"
-        ).distinct():
-            competency_id = competency["competency"]
-
-            competency_name_for_object = Competency.objects.get(id=competency_id).name
-            competency_description_for_object = Competency.objects.get(
-                id=competency_id
-            ).description
-            competency_object = {
-                "competency_name": competency_name_for_object,
-                "competency_description": competency_description_for_object,
-            }
-            compentency_with_description.append(competency_object)
-
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in total_for_each_comp:
-                total_for_each_comp[question.competency.name] = 1
-            else:
-                total_for_each_comp[question.competency.name] += 1
-
-        competency_object = {}
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in competency_object:
-                competency_object[question.competency.name] = 0
-
-            participant_response_value = participant_response.participant_response.get(
-                str(question.id)
-            )
-
-            if question.response_type == "correct_answer":
-                correct_answer = (
-                    assessment.questionnaire.questions.filter(id=question.id)
-                    .first()
-                    .correct_answer
-                )
-
-                if str(participant_response_value) in correct_answer:
-                    competency_object[question.competency.name] = (
-                        competency_object[question.competency.name] + 1
-                    )
-
-            elif question.response_type == "rating_type":
-                if participant_response_value:
-                    label_count = sum(
-                        1 for key in question.label.keys() if question.label[key]
-                    )
-                    if not question.reverse_question:
-
-                        swap_dict = swap_positions(label_count)
-
-                        competency_object[question.competency.name] = competency_object[
-                            question.competency.name
-                        ] + (swap_dict[participant_response_value] / label_count)
-                    else:
-
-                        competency_object[question.competency.name] = competency_object[
-                            question.competency.name
-                        ] + (participant_response_value / label_count)
-
-        competency_percentage = {}
-        for comp in total_for_each_comp:
-            competency_percentage[comp] = round(
-                (competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-
-        if project_wise:
-            return competency_percentage
-
-        encoded_image = generate_graph_for_pre_assessment(
-            competency_percentage, total_for_each_comp
-        )
-
-        return encoded_image, compentency_with_description
-
-    if project_wise:
-        return None
-
-    return None, None
-
-
-def generate_graph_for_participant_for_post_assessment(
-    participant, assessment_id, assessment, project_wise=False
-):
-    participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment_id
-    ).first()
-
-    pre_assessment_participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment.pre_assessment.id
-    ).first()
-
-    if participant_response and pre_assessment_participant_response:
-        total_for_each_comp = {}
-        compentency_with_description = []
-
-        for competency in assessment.questionnaire.questions.values(
-            "competency"
-        ).distinct():
-            competency_id = competency["competency"]
-
-            competency_name_for_object = Competency.objects.get(id=competency_id).name
-            competency_description_for_object = Competency.objects.get(
-                id=competency_id
-            ).description
-            competency_object = {
-                "competency_name": competency_name_for_object,
-                "competency_description": competency_description_for_object,
-            }
-            compentency_with_description.append(competency_object)
-
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in total_for_each_comp:
-                total_for_each_comp[question.competency.name] = 1
-            else:
-                total_for_each_comp[question.competency.name] += 1
-
-        competency_object = {}
-        pre_competency_object = {}
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in competency_object:
-                competency_object[question.competency.name] = 0
-            if question.competency.name not in pre_competency_object:
-                pre_competency_object[question.competency.name] = 0
-
-            participant_response_value = participant_response.participant_response.get(
-                str(question.id)
-            )
-            pre_assessment_participant_response_value = (
-                pre_assessment_participant_response.participant_response.get(
-                    str(question.id)
-                )
-            )
-
-            if question.response_type == "correct_answer":
-
-                correct_answer = (
-                    assessment.questionnaire.questions.filter(id=question.id)
-                    .first()
-                    .correct_answer
-                )
-
-                if str(pre_assessment_participant_response_value) in correct_answer:
-
-                    pre_competency_object[question.competency.name] = (
-                        pre_competency_object[question.competency.name] + 1
-                    )
-
-                if str(participant_response_value) in correct_answer:
-                    competency_object[question.competency.name] = (
-                        competency_object[question.competency.name] + 1
-                    )
-
-            elif question.response_type == "rating_type":
-                if participant_response_value:
-                    label_count = sum(
-                        1 for key in question.label.keys() if question.label[key]
-                    )
-                    swap_dict = swap_positions(label_count)
-                    if pre_assessment_participant_response_value:
-                        if not question.reverse_question:
-
-                            pre_competency_object[
-                                question.competency.name
-                            ] = pre_competency_object[question.competency.name] + (
-                                swap_dict[pre_assessment_participant_response_value]
-                                / label_count
-                            )
-                        else:
-                            pre_competency_object[
-                                question.competency.name
-                            ] = pre_competency_object[question.competency.name] + (
-                                pre_assessment_participant_response_value / label_count
-                            )
-
-                    if participant_response_value:
-                        if not question.reverse_question:
-                            competency_object[question.competency.name] = (
-                                competency_object[question.competency.name]
-                                + (swap_dict[participant_response_value] / label_count)
-                            )
-                        else:
-                            competency_object[question.competency.name] = (
-                                competency_object[question.competency.name]
-                                + (participant_response_value / label_count)
-                            )
-
-        competency_percentage = {}
-        pre_competency_percentage = {}
-        for comp in total_for_each_comp:
-            competency_percentage[comp] = round(
-                (competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-            pre_competency_percentage[comp] = round(
-                (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-
-        if project_wise:
-            return pre_competency_percentage, competency_percentage
-        encoded_image = generate_graph_for_pre_post_assessment(
-            pre_competency_percentage, competency_percentage, total_for_each_comp
-        )
-
-        return encoded_image, compentency_with_description
-
-    return None, None
-
 
 class PrePostReportDownloadForParticipant(APIView):
     permission_classes = [AllowAny]
@@ -3878,7 +3556,10 @@ class PrePostReportDownloadForParticipant(APIView):
             encoded_image = None
             compentency_with_description = None
 
-            if assessment.assessment_timing == "pre" or assessment.assessment_timing == "none":
+            if (
+                assessment.assessment_timing == "pre"
+                or assessment.assessment_timing == "none"
+            ):
                 (
                     encoded_image,
                     compentency_with_description,
@@ -3941,7 +3622,10 @@ class PrePostReportDownloadForAllParticipant(APIView):
                 encoded_image = None
                 compentency_with_description = None
 
-                if assessment.assessment_timing == "pre" or assessment.assessment_timing == "none" :
+                if (
+                    assessment.assessment_timing == "pre"
+                    or assessment.assessment_timing == "none"
+                ):
                     (
                         encoded_image,
                         compentency_with_description,
@@ -4152,36 +3836,82 @@ class ReleaseResults(APIView):
                     assessment.save()
 
                 if assessment.assessment_timing != "none":
-                    for participant in participant_with_not_released_results:
-                        encoded_image = None
-                        compentency_with_description = None
-                        if assessment.assessment_timing == "pre":
-                            (
-                                encoded_image,
-                                compentency_with_description,
-                            ) = generate_graph_for_participant(
-                                participant, assessment_id, assessment
+                    automate_result_change.delay(participant_with_not_released_results,assessment)
+            else:
+                assessment.result_released = True
+                assessment.save()
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(
+                {
+                    "success": "Successfully Released Results",
+                    "assessment_data": serializer.data,
+                }
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to Release Results"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AutomateResultChange(APIView):
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+
+    def put(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            if assessment.automated_result:
+                assessment.automated_result = False
+            else:
+                assessment.automated_result = True
+            assessment.save()
+            if (
+                assessment.assessment_timing == "pre"
+                or assessment.assessment_timing == "post"
+            ) and assessment.automated_result:
+                (
+                    participant_released_results,
+                    created,
+                ) = ParticipantReleasedResults.objects.get_or_create(
+                    assessment=assessment
+                )
+                participant_with_released_results = []
+                if not created:
+                    participant_with_released_results = (
+                        participant_released_results.participants.all()
+                    )
+
+                participant_with_not_released_results = []
+                for participant_observer in assessment.participants_observers.all():
+                    participant_response_present = ParticipantResponse.objects.filter(
+                        assessment=assessment,
+                        participant=participant_observer.participant,
+                    ).exists()
+                    if participant_response_present:
+                        if (
+                            participant_observer.participant
+                            not in participant_with_released_results
+                        ):
+                            participant_with_not_released_results.append(
+                                participant_observer.participant
                             )
-                        elif assessment.assessment_timing == "post":
-                            (
-                                encoded_image,
-                                compentency_with_description,
-                            ) = generate_graph_for_participant_for_post_assessment(
-                                participant, assessment_id, assessment
+                            participant_released_results.participants.add(
+                                participant_observer.participant
                             )
-                        send_mail_templates(
-                            "assessment/air_india_report_mail.html",
-                            [participant.email],
-                            "Meeraq Assessment Report",
-                            {
-                                "name": participant.name.title(),
-                                "image_base64": encoded_image,
-                                "compentency_with_description": compentency_with_description,
-                                "assessment_timing": assessment.assessment_timing,
-                                "assessment_name": assessment.participant_view_name,
-                            },
-                            [],
-                        )
+
+                participant_released_results.save()
+
+                if len(assessment.participants_observers.all()) == (
+                    len(participant_with_released_results)
+                    + len(participant_with_not_released_results)
+                ):
+                    assessment.result_released = True
+                    assessment.save()
+
+                if assessment.assessment_timing != "none":
+                    automate_result_change.delay(participant_with_not_released_results,assessment)
             else:
                 assessment.result_released = True
                 assessment.save()
@@ -4649,7 +4379,7 @@ class GetParticipantReleasedResults(APIView):
             participant_released_results = ParticipantReleasedResults.objects.filter(
                 assessment__id=assessment_id
             ).first()
-            
+
             serializer = ParticipantReleasedResultsSerializerDepthOne(
                 participant_released_results
             )
@@ -5932,7 +5662,7 @@ class GetTempResponseParticipantObserver(APIView):
                     temp_response = participant_response.temp_participant_response
                     active_question = participant_response.active_question
                     current_competency = participant_response.current_competency
-                  
+
             elif user_type == "observer":
                 observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
 

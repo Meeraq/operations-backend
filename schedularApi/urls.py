@@ -497,5 +497,13 @@ urlpatterns = [
         "get-upcoming-past-live-session-facilitator/<int:user_id>/",
         views.get_upcoming_past_live_session_facilitator,
     ),
-    path('get-upcoming-conflicting-sessions/', views.get_upcoming_conflicting_sessions, name='get_upcoming_conflicting_sessions'),
+    path(
+        "get-upcoming-conflicting-sessions/",
+        views.get_upcoming_conflicting_sessions,
+        name="get_upcoming_conflicting_sessions",
+    ),
+    path(
+        "batch/<int:batch_id>/competency/<int:competency_id>/behavior/<int:behavior_id>/new-graph/",
+        views.new_graph,
+    ),
 ]
