@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django_celery_beat.models import PeriodicTask
 import uuid
 from assessmentApi.models import Assessment as AssessmentModal, Competency, Behavior
-from api.models import SessionRequestCaas, Project
+from api.models import SessionRequestCaas, Project, Curriculum
 
 # Create your models here.
 
@@ -277,11 +277,23 @@ class ThinkificLessonCompleted(models.Model):
 
 
 class NudgeResources(models.Model):
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("public", "Public"),
+    ]
+
     name = models.CharField(max_length=255)
     content = models.TextField()
     file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
     competency = models.ManyToManyField(Competency)
     behavior = models.ManyToManyField(Behavior)
+    curriculum = models.ForeignKey(
+        Curriculum, on_delete=models.CASCADE, blank=True, null=True
+    )
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, blank=True, null=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
