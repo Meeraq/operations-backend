@@ -2400,13 +2400,13 @@ def generate_graph(data, assessment_type):
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
-    num_graphs = int(np.ceil(num_competencies / 7.0))
+    num_graphs = int(np.ceil(num_competencies / 11.0))
 
     encoded_images = []  # Array to store base64 encoded images
 
     for i in range(num_graphs):
-        start_index = i * 7
-        end_index = min((i + 1) * 7, num_competencies)
+        start_index = i * 11
+        end_index = min((i + 1) * 11, num_competencies)
         subset_data = data[start_index:end_index]
 
         fig, ax = plt.subplots(figsize=(13, 6))
@@ -3457,8 +3457,6 @@ def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each
     return encoded_image
 
 
-
-
 def generate_spider_web_for_pre_post_assessment(
     pre_competency_percentage, competency_percentage, total_for_each_comp
 ):
@@ -3535,7 +3533,6 @@ def generate_spider_web_for_pre_post_assessment(
     encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
 
     return encoded_image
-
 
 
 class PrePostReportDownloadForParticipant(APIView):
@@ -3792,10 +3789,7 @@ class ReleaseResults(APIView):
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-            if (
-                assessment.assessment_timing == "pre"
-                or assessment.assessment_timing == "post"
-            ):
+            if assessment.assessment_type == "self":
                 (
                     participant_released_results,
                     created,
@@ -3836,7 +3830,9 @@ class ReleaseResults(APIView):
                     assessment.save()
 
                 if assessment.assessment_timing != "none":
-                    automate_result_change.delay(participant_with_not_released_results,assessment)
+                    automate_result_change.delay(
+                        participant_with_not_released_results, assessment
+                    )
             else:
                 assessment.result_released = True
                 assessment.save()
@@ -3911,7 +3907,9 @@ class AutomateResultChange(APIView):
                     assessment.save()
 
                 if assessment.assessment_timing != "none":
-                    automate_result_change.delay(participant_with_not_released_results,assessment)
+                    automate_result_change.delay(
+                        participant_with_not_released_results, assessment
+                    )
             else:
                 assessment.result_released = True
                 assessment.save()
