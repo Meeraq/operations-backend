@@ -3736,7 +3736,6 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
             coach__id=coach_id,
             start_time__gte=start_timestamp,
             end_time__lte=end_timestamp,
-            is_confirmed=True,
         )
         coach_availabilities_date_wise[date] = CoachSchedularAvailibiltySerializer(
             coach_availabilities, many=True
