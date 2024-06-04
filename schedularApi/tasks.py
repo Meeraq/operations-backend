@@ -3677,7 +3677,7 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                 nudge.save()
                 sleep(5)
 
-
+@shared_task
 def automate_result_change(participant_with_not_released_results, assessment):
     try:
         for participant in participant_with_not_released_results:
