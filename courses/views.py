@@ -38,6 +38,7 @@ from .models import (
     CoachingSessionsFeedbackResponse,
     CttFeedback,
     CttFeedbackResponse,
+    NudgeResources,
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -76,6 +77,8 @@ from .serializers import (
     FeedbackDepthOneSerializer,
     LessonSerializerForLiveSessionDateTime,
     CttFeedbackDepthOneSerializer,
+    NudgeResourcesSerializer,
+    NudgeResourcesSerializerDepthOne,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -338,7 +341,7 @@ def create_lessons_for_batch(batch):
                 session_name = "Mentoring session"
             elif coaching_session.session_type == "action_coaching_session":
                 session_name = "Action Coaching Session"
-                
+
             new_lesson = Lesson.objects.create(
                 course=course,
                 name=f"{session_name} {coaching_session.coaching_session_number}",
@@ -638,6 +641,34 @@ def create_new_nudge(request):
         serializer = NudgeSerializer(nudge_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def get_all_nudge_resources(request):
+
+    nudges = NudgeResources.objects.all()
+
+    serializer = NudgeResourcesSerializerDepthOne(nudges)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def create_new_nudge_resources(request):
+
+    serializer = NudgeResourcesSerializer(data=request.data)
+
+    if serializer.is_valid():
+        nudge_instance = serializer.save()
+
+        serializer = NudgeSerializer(nudge_instance)
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["PUT"])
@@ -2547,7 +2578,7 @@ class AssignCourseTemplateToBatch(APIView):
                     lesson=facilitator_lesson_creation,
                 )
                 assessment_creation = False
-                
+
                 if batch.project.pre_assessment:
                     assessment_creation = True
                     lesson1 = Lesson.objects.create(
@@ -2558,9 +2589,7 @@ class AssignCourseTemplateToBatch(APIView):
                         # Duplicate specific lesson types
                         order=2,
                     )
-                    assessment1 = Assessment.objects.create(
-                        lesson=lesson1, type="pre"
-                    )
+                    assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -4330,7 +4359,10 @@ def get_released_certificates_for_learner(request, learner_id):
 def get_all_nudges_for_that_learner(request, learner_id):
     try:
         nudges = Nudge.objects.filter(
-            Q(is_sent=True), Q(is_switched_on=True),Q(batch__learners__id=learner_id) | Q(caas_project__engagement__learner__id=learner_id)
+            Q(is_sent=True),
+            Q(is_switched_on=True),
+            Q(batch__learners__id=learner_id)
+            | Q(caas_project__engagement__learner__id=learner_id),
         ).distinct()
         serializer = NudgeSerializer(nudges, many=True)
         return Response({"nudges": serializer.data})

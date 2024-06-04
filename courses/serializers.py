@@ -26,6 +26,7 @@ from .models import (
     FacilitatorLesson,
     Feedback,
     CttFeedback,
+    NudgeResources,
 )
 from schedularApi.models import LiveSession
 from django.core.files.storage import default_storage
@@ -56,6 +57,19 @@ class NudgeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Nudge
         fields = "__all__"
+
+
+class NudgeResourcesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NudgeResources
+        fields = "__all__"
+
+
+class NudgeResourcesSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = NudgeResources
+        fields = "__all__"
+        depth = 1
 
 
 class TextLessonCreateSerializer(serializers.ModelSerializer):

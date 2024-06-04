@@ -276,6 +276,19 @@ class ThinkificLessonCompleted(models.Model):
         return f"{self.student_name} completed {self.lesson_name} in {self.course_name}"
 
 
+class NudgeResources(models.Model):
+    name = models.CharField(max_length=255)
+    content = models.TextField()
+    file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    competency = models.ManyToManyField(Competency)
+    behavior = models.ManyToManyField(Behavior)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Nudge(models.Model):
     name = models.CharField(max_length=255)
     content = models.TextField()
