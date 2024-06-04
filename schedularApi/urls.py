@@ -506,4 +506,5 @@ urlpatterns = [
         "batch/<int:batch_id>/competency/<int:competency_id>/behavior/<int:behavior_id>/new-graph/",
         views.new_graph,
     ),
+    path("get-booking-id-of-session/", views.get_booking_id_of_session),
 ]
