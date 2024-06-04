@@ -290,9 +290,12 @@ class NudgeResources(models.Model):
 
 
 class Nudge(models.Model):
-    name = models.CharField(max_length=255)
-    content = models.TextField()
+    name = models.CharField(max_length=255, blank=True, null=True)
+    content = models.TextField(blank=True, null=True)
     file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    nudge_resources = models.ForeignKey(
+        NudgeResources, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
     order = models.IntegerField()
     # course = models.ForeignKey(Course, on_delete=models.CASCADE)
     batch = models.ForeignKey(
