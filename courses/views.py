@@ -336,6 +336,9 @@ def create_lessons_for_batch(batch):
                 session_name = "Laser coaching"
             elif coaching_session.session_type == "mentoring_session":
                 session_name = "Mentoring session"
+            elif coaching_session.session_type == "action_coaching_session":
+                session_name = "Action Coaching Session"
+                
             new_lesson = Lesson.objects.create(
                 course=course,
                 name=f"{session_name} {coaching_session.coaching_session_number}",

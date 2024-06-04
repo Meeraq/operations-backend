@@ -10,7 +10,7 @@ urlpatterns = [
     ),
     path("create-benchmark/", views.create_benchmark, name="create_benchmark"),
     # path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
-    path('update-benchmark/', views.update_benchmark, name='update_benchmark'),
+    path("update-benchmark/", views.update_benchmark, name="update_benchmark"),
     path("get-benchmark/", views.get_all_benchmarks),
     path("create-gmsheet/", views.create_gmsheet, name="create_gmsheet"),
     path("update-status/", views.update_status, name="update-status"),
@@ -30,11 +30,10 @@ urlpatterns = [
     path("gmsheet/maxNumber/", views.max_gmsheet_number, name="max_gmsheet_number"),
     path("asset/maxNumber/", views.max_asset_number, name="max_asset_number"),
     path("gmsheet-by-sales/<int:sales_person_id>", views.get_gmsheet_by_sales),
-    path('create-employee/', views.create_employee, name='employee-create'),
-    path('employees/', views.get_employees, name='get_employees'),
-    path('update-employee/', views.update_employee, name='update_employee'),
-    path('delete-employee/', views.delete_employee, name='delete_employee'),
-
+    path("create-employee/", views.create_employee, name="employee-create"),
+    path("employees/", views.get_employees, name="get_employees"),
+    path("update-employee/", views.update_employee, name="update_employee"),
+    path("delete-employee/", views.delete_employee, name="delete_employee"),
     path(
         "current-or-next-year/",
         views.get_current_or_next_year,
@@ -438,6 +437,11 @@ urlpatterns = [
         name="update_action_item_status",
     ),
     path(
+        "action-items/add-remark/<int:pk>/",
+        views.add_remark_to_action_item,
+        name="add_remark_to_action_item",
+    ),
+    path(
         "action-items/delete/<int:pk>/",
         views.delete_action_item,
         name="delete_action_item",
@@ -493,4 +497,14 @@ urlpatterns = [
         "get-upcoming-past-live-session-facilitator/<int:user_id>/",
         views.get_upcoming_past_live_session_facilitator,
     ),
+    path(
+        "get-upcoming-conflicting-sessions/",
+        views.get_upcoming_conflicting_sessions,
+        name="get_upcoming_conflicting_sessions",
+    ),
+    path(
+        "batch/<int:batch_id>/competency/<int:competency_id>/behavior/<int:behavior_id>/new-graph/",
+        views.new_graph,
+    ),
+    path("get-booking-id-of-session/", views.get_booking_id_of_session),
 ]
