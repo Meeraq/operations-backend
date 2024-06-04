@@ -3789,10 +3789,7 @@ class ReleaseResults(APIView):
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-            if (
-                assessment.assessment_timing == "pre"
-                or assessment.assessment_timing == "post"
-            ):
+            if assessment.assessment_type == "self":
                 (
                     participant_released_results,
                     created,
