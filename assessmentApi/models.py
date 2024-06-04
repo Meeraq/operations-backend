@@ -178,6 +178,7 @@ class Assessment(models.Model):
     batch = models.ForeignKey(
         SchedularBatch, on_delete=models.CASCADE, blank=True, null=True
     )
+    automated_result = models.BooleanField(blank=True, default=False)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

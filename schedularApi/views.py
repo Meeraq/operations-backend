@@ -1251,7 +1251,7 @@ def create_batch_calendar(batch):
                 },
                 3,
             )
-        elif session_type in ["laser_coaching_session"]:
+        elif session_type in ["laser_coaching_session", "mentoring_session", "action_coaching_session"]:
             coaching_session_number = (
                 CoachingSession.objects.filter(
                     batch=batch, session_type=session_type

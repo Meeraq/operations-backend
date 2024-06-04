@@ -78,6 +78,7 @@ from .views import (
     GetAssessmentOfCoachingProject,
     StoreTempResponseParticipantObserver,
     GetTempResponseParticipantObserver,
+    AutomateResultChange,
 )
 
 
@@ -382,5 +383,9 @@ urlpatterns = [
     path(
         "get-temp-password/<str:user_type>/<str:unique_id>/",
         GetTempResponseParticipantObserver.as_view(),
+    ),
+    path(
+        "automate-result-change/<int:assessment_id>/",
+        AutomateResultChange.as_view(),
     ),
 ]
