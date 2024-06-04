@@ -9128,6 +9128,6 @@ def get_booking_id_of_session(request):
             booking_link =  coaching_sessions.first().booking_link
             splitted_link = booking_link.split("/")
             return Response({ "booking_unique_id" : splitted_link[-1], "email": email})
-        return Response({"error" : "Failed to verify the user 1."} ,status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error" : "Failed to verify the user."} ,status=status.HTTP_400_BAD_REQUEST)
     else:
-        return Response({"error" : "Failed to verify the user 2."} ,status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error" : "Failed to verify the user."} ,status=status.HTTP_400_BAD_REQUEST)
