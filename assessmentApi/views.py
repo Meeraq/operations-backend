@@ -2400,13 +2400,13 @@ def generate_graph(data, assessment_type):
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
-    num_graphs = int(np.ceil(num_competencies / 10.0))
+    num_graphs = int(np.ceil(num_competencies / 11.0))
 
     encoded_images = []  # Array to store base64 encoded images
 
     for i in range(num_graphs):
-        start_index = i * 10
-        end_index = min((i + 1) * 10, num_competencies)
+        start_index = i * 11
+        end_index = min((i + 1) * 11, num_competencies)
         subset_data = data[start_index:end_index]
 
         fig, ax = plt.subplots(figsize=(13, 6))
