@@ -120,7 +120,8 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
-from django.db.models import Max, Q
+from django.db.models import Max, Q, CharField
+from django.db.models import ArrayAgg
 import environ
 import uuid
 import logging
@@ -648,9 +649,11 @@ def create_new_nudge(request):
 @transaction.atomic
 def get_all_nudge_resources(request):
 
-    nudges = NudgeResources.objects.all()
+    nudges = NudgeResources.objects.annotate(
+        nudge_names=ArrayAgg("nudge__batch__project__name", distinct=True, output_field=CharField())
+    )
 
-    serializer = NudgeResourcesSerializerDepthOne(nudges)
+    serializer = NudgeResourcesSerializerDepthOne(nudges, many=True)
 
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -669,6 +672,43 @@ def create_new_nudge_resources(request):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def update_nudge_resource(request, nudge_id):
+    try:
+        nudge_resource = NudgeResources.objects.get(id=nudge_id)
+    except NudgeResources.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    serializer = NudgeResourcesSerializer(
+        nudge_resource, data=request.data, partial=True
+    )
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def delete_nudge_resource(request, nudge_id):
+    try:
+        nudge_resource = NudgeResources.objects.get(id=nudge_id)
+
+        nudge_resource.delete()
+
+        return Response(
+            {"message": "Nudge resource deleted successfully!"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        return Response(
+            {"error": "Failed to delete nudge resource"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["PUT"])
