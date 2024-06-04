@@ -2473,7 +2473,6 @@ def get_coach_availabilities_booking_link(request):
 
             session_duration = coaching_session.duration
             session_type = coaching_session.session_type
-
             coaches_in_batch = coaching_session.batch.coaches.all()
             start_date = datetime.combine(
                 coaching_session.start_date, datetime.min.time()
@@ -2500,6 +2499,15 @@ def get_coach_availabilities_booking_link(request):
                 if coaching_session_id
                 else None
             )
+            
+            language_coaches = {}
+            for coach_instance in coaches_in_batch:
+                for language in coach_instance.language:
+                    if language in language_coaches:
+                        language_coaches[language].append(coach_instance.id)
+                    else:
+                        language_coaches[language] = [coach_instance.id]
+            
             return Response(
                 {
                     "project_status": coaching_session.batch.project.status,
@@ -2507,6 +2515,7 @@ def get_coach_availabilities_booking_link(request):
                     "session_duration": session_duration,
                     "session_type": session_type,
                     "coaches": coaches_serializer.data if coaches_serializer else None,
+                    "language_coaches" : language_coaches
                 }
             )
         except Exception as e:
@@ -3736,7 +3745,6 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
             coach__id=coach_id,
             start_time__gte=start_timestamp,
             end_time__lte=end_timestamp,
-            is_confirmed=True,
         )
         coach_availabilities_date_wise[date] = CoachSchedularAvailibiltySerializer(
             coach_availabilities, many=True
@@ -8822,7 +8830,6 @@ def batch_competency_movement(request, batch_id, competency_id):
     return Response(
         {"action_item_movement": data, "action_item_counts": action_item_counts}
     )
-
 def find_conflicting_sessions():
     coach_conflicts = defaultdict(list)
     current_time = timezone.now()
@@ -8880,3 +8887,60 @@ def find_conflicting_sessions():
 def get_upcoming_conflicting_sessions(request):
     res = find_conflicting_sessions()
     return Response(res)
+
+
+def calculate_date_range(d1, d2, interval):
+    if not d1 or not d2:
+        return []
+
+    date_range = []
+    current_date = d1
+    while current_date <= d2:
+        date_range.append(current_date)
+        current_date += timedelta(days=interval)
+    return date_range
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def new_graph(request,batch_id, competency_id, behavior_id):
+    # Get interval from query parameters
+    interval = int(request.query_params.get('interval', 1))
+
+    # Retrieve d1 from the first created action item
+    first_created_action_item = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id).order_by('created_at').first()
+    d1 = first_created_action_item.created_at.date() if first_created_action_item else None
+
+    # Retrieve d2 from the last updated action item
+    last_updated_action_item = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id).order_by('-updated_at').first()
+    d2 = last_updated_action_item.updated_at.date() if last_updated_action_item else None
+
+    # Calculate date range based on interval
+    date_range = calculate_date_range(d1, d2, interval)
+    graph_data = [{"date": date.strftime('%d/%m/%y')} for date in date_range]
+    last_index = len(date_range) - 1
+    # outer loop
+    for outer_index, date in enumerate(date_range):
+        if outer_index < last_index:
+            filtered_action_items = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id,created_at__gte=date,created_at__lte=date_range[outer_index+1])
+            for inner_index in range(outer_index, len(graph_data)):
+                movements = []
+                for action_item in filtered_action_items:
+                    movement = 0
+                    initial_status = action_item.initial_status
+                    latest_status = None
+                    for update in action_item.status_updates:
+                        update_date = datetime.strptime(
+                            update["updated_at"], "%Y-%m-%d %H:%M:%S.%f+00:00"
+                        ).date()
+                        if update_date <= date_range[outer_index+1]:
+                            latest_status = update["status"]
+                        else:
+                            break  # Break the loop if update date is after the mapped date
+                    if latest_status:
+                        movement =  status_choices_dict[latest_status] - status_choices_dict[initial_status]
+                        movements.append(movement)
+                average = sum(movements) / len(movements) if movements else 0
+                graph_data[inner_index][f"{filtered_action_items.count()} Actions created on " + (date_range[outer_index]).strftime("%d/%m/%y")] = average
+    return Response({"graph_data": graph_data})
+
