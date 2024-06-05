@@ -3829,10 +3829,10 @@ class ReleaseResults(APIView):
                     assessment.result_released = True
                     assessment.save()
 
-                if assessment.assessment_timing != "none":
-                    automate_result_change.delay(
-                        participant_with_not_released_results, assessment
-                    )
+                automate_result_change.delay(
+                    participant_with_not_released_results, assessment
+                )
+
             else:
                 assessment.result_released = True
                 assessment.save()
@@ -3863,10 +3863,7 @@ class AutomateResultChange(APIView):
             else:
                 assessment.automated_result = True
             assessment.save()
-            if (
-                assessment.assessment_timing == "pre"
-                or assessment.assessment_timing == "post"
-            ) and assessment.automated_result:
+            if assessment.assessment_type == "self" and assessment.automated_result:
                 (
                     participant_released_results,
                     created,
@@ -3906,10 +3903,9 @@ class AutomateResultChange(APIView):
                     assessment.result_released = True
                     assessment.save()
 
-                if assessment.assessment_timing != "none":
-                    automate_result_change.delay(
-                        participant_with_not_released_results, assessment
-                    )
+                automate_result_change.delay(
+                    participant_with_not_released_results, assessment
+                )
             else:
                 assessment.result_released = True
                 assessment.save()
