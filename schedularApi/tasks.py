@@ -45,6 +45,7 @@ from assessmentApi.models import (
     ObserverResponse,
     ParticipantObserverType,
     Competency,
+    ParticipantReleasedResults,
 )
 from courses.models import (
     Course,
@@ -74,6 +75,7 @@ from zohoapi.tasks import get_access_token, organization_id, base_url
 from courses.serializers import NudgeSerializer
 from api.models import Role, Profile
 import matplotlib.pyplot as plt
+
 env = environ.Env()
 environ.Env.read_env()
 import random
@@ -95,6 +97,7 @@ def swap_positions(length):
         orig: swapped for orig, swapped in zip(range(1, length + 1), numbers)
     }
     return swapped_dict
+
 
 def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp):
     comp_labels = list(competency_percentage.keys())
@@ -151,6 +154,7 @@ def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp
     encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
 
     return encoded_image
+
 
 def generate_graph_for_pre_post_assessment(
     pre_competency_percentage, competency_percentage, total_for_each_comp
@@ -324,8 +328,6 @@ def generate_graph_for_participant(
     return None, None
 
 
-
-
 def generate_graph_for_participant_for_post_assessment(
     participant, assessment_id, assessment, project_wise=False
 ):
@@ -455,7 +457,6 @@ def generate_graph_for_participant_for_post_assessment(
         return encoded_image, compentency_with_description
 
     return None, None
-
 
 
 def create_learner(learner_name, learner_email, learner_phone=None):
@@ -3737,14 +3738,56 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                 nudge.save()
                 sleep(5)
 
+
 @shared_task
-def automate_result_change(participant_with_not_released_results, assessment):
+def result_sending(assessment):
     try:
-        for participant in participant_with_not_released_results:
-            try:
+        if assessment.assessment_type == "self":
+            (
+                participant_released_results,
+                created,
+            ) = ParticipantReleasedResults.objects.get_or_create(assessment=assessment)
+            participant_with_released_results = []
+            if not created:
+                participant_with_released_results = (
+                    participant_released_results.participants.all()
+                )
+
+            participant_with_not_released_results = []
+            for participant_observer in assessment.participants_observers.all():
+                participant_response_present = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant=participant_observer.participant,
+                ).exists()
+                if participant_response_present:
+                    if (
+                        participant_observer.participant
+                        not in participant_with_released_results
+                    ):
+                        participant_with_not_released_results.append(
+                            participant_observer.participant
+                        )
+                        participant_released_results.participants.add(
+                            participant_observer.participant
+                        )
+
+            participant_released_results.save()
+
+            if len(assessment.participants_observers.all()) == (
+                len(participant_with_released_results)
+                + len(participant_with_not_released_results)
+            ):
+                assessment.result_released = True
+                assessment.save()
+
+            for participant in participant_with_not_released_results:
+
                 encoded_image = None
                 compentency_with_description = None
-                if assessment.assessment_timing == "pre":
+                if (
+                    assessment.assessment_timing == "pre"
+                    or assessment.assessment_timing == "none"
+                ):
                     (
                         encoded_image,
                         compentency_with_description,
@@ -3772,7 +3815,10 @@ def automate_result_change(participant_with_not_released_results, assessment):
                     [],
                 )
                 sleep(5)
-            except Exception as e:
-                print(str(e))
+
+        else:
+            assessment.result_released = True
+            assessment.save()
+
     except Exception as e:
         print(str(e))
