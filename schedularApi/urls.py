@@ -152,6 +152,10 @@ urlpatterns = [
         views.get_existing_slots_of_coach_on_request_dates,
     ),
     path("send_coaching_session_mail/", views.send_unbooked_coaching_session_mail),
+    path(
+        "send-coaching-session-whatsapp-message/",
+        views.send_unbooked_coaching_session_whatsapp_message,
+    ),
     path("download_report/", views.export_available_slot),
     path(
         "create-schedular-participant/<int:batch_id>/", views.add_participant_to_batch
@@ -506,4 +510,5 @@ urlpatterns = [
         "batch/<int:batch_id>/competency/<int:competency_id>/behavior/<int:behavior_id>/new-graph/",
         views.new_graph,
     ),
+    path("get-booking-id-of-session/", views.get_booking_id_of_session),
 ]
