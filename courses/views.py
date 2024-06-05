@@ -656,7 +656,10 @@ def get_all_nudge_resources(request):
         project_names = set()
         nudges = Nudge.objects.filter(nudge_resources=nudge_resource)
         for nudge in nudges:
-            project_names.add(nudge.batch.project.name)
+            if nudge.batch:
+                project_names.add(nudge.batch.project.name)
+            elif nudge.caas_project:
+                project_names.add(nudge.caas_project.name)
 
         serializer = NudgeResourcesSerializerDepthOne(nudge_resource)
         all_resources.append({**serializer.data, "project_names": list(project_names)})
