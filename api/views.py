@@ -5312,7 +5312,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
         session_duration = session_request.session_duration
         is_archive = session_request.is_archive
         invitees = session_request.invitees
-
+        
         res.append(
             {
                 "project_name": project_name,
@@ -5335,6 +5335,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "invitees": invitees,
                 "coach": coach,
                 "project": project,
+                "engagement" : session_request.engagement.id if session_request.engagement else None
             }
         )
     for schedular_session in schedular_sessions:
