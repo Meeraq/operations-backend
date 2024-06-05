@@ -100,7 +100,7 @@ def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp
     comp_labels = list(competency_percentage.keys())
     percentage_values = list(competency_percentage.values())
     colors1 = ["#eb0081", "#d1cdcd"]
-    colors2 = ["#b91689", "#d1cdcd"]
+    colors2 = ["#b9168  9", "#d1cdcd"]
     colors3 = ["#7a3191", "#d1cdcd"]
     colors4 = ["#374e9c", "#d1cdcd"]
 
@@ -151,6 +151,7 @@ def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp
     encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
 
     return encoded_image
+
 
 def generate_graph_for_pre_post_assessment(
     pre_competency_percentage, competency_percentage, total_for_each_comp
@@ -324,8 +325,6 @@ def generate_graph_for_participant(
     return None, None
 
 
-
-
 def generate_graph_for_participant_for_post_assessment(
     participant, assessment_id, assessment, project_wise=False
 ):
@@ -455,7 +454,6 @@ def generate_graph_for_participant_for_post_assessment(
         return encoded_image, compentency_with_description
 
     return None, None
-
 
 
 def create_learner(learner_name, learner_email, learner_phone=None):
@@ -3677,6 +3675,7 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                 nudge.save()
                 sleep(5)
 
+
 @shared_task
 def automate_result_change(participant_with_not_released_results, assessment):
     try:
@@ -3684,7 +3683,10 @@ def automate_result_change(participant_with_not_released_results, assessment):
             try:
                 encoded_image = None
                 compentency_with_description = None
-                if assessment.assessment_timing == "pre":
+                if (
+                    assessment.assessment_timing == "pre"
+                    or assessment.assessment_timing == "none"
+                ):
                     (
                         encoded_image,
                         compentency_with_description,
