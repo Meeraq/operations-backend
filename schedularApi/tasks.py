@@ -100,7 +100,7 @@ def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp
     comp_labels = list(competency_percentage.keys())
     percentage_values = list(competency_percentage.values())
     colors1 = ["#eb0081", "#d1cdcd"]
-    colors2 = ["#b9168  9", "#d1cdcd"]
+    colors2 = ["#b91689", "#d1cdcd"]
     colors3 = ["#7a3191", "#d1cdcd"]
     colors4 = ["#374e9c", "#d1cdcd"]
 
