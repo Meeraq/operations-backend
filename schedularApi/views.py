@@ -3755,7 +3755,7 @@ def get_requests_of_coach(request, coach_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach","pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo")])
 def get_slots_of_request(request, request_id):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -8964,7 +8964,6 @@ def batch_competency_movement(request, batch_id, competency_id):
         {"action_item_movement": data, "action_item_counts": action_item_counts}
     )
 
-
 def find_conflicting_sessions():
     coach_conflicts = defaultdict(list)
     current_time = timezone.now()
@@ -8977,7 +8976,6 @@ def find_conflicting_sessions():
         start_time = session.availibility.start_time
         end_time = session.availibility.end_time
         session_id = session.id
-
         conflicting_sessions = SchedularSessions.objects.filter(
             Q(availibility__coach_id=coach_id),
             Q(
@@ -8993,7 +8991,6 @@ def find_conflicting_sessions():
         ).exclude(
             id=session_id
         )  # Exclude the current session itself
-
         for conflicting_session in conflicting_sessions:
             conflicting_session_id = conflicting_session.id
             # Ensure only one of the conflicting pairs is added
@@ -9005,33 +9002,44 @@ def find_conflicting_sessions():
     result = []
     for session_id, conflicts in coach_conflicts.items():
         session_obj = SchedularSessions.objects.get(id=session_id)
-        session_coach_name = session_obj.availibility.coach.first_name
+        session_coach_name = session_obj.availibility.coach.first_name + " " + session_obj.availibility.coach.last_name
         session_start_time = session_obj.availibility.start_time
         session_end_time = session_obj.availibility.end_time
         session_learner_name = session_obj.learner.name
+        session_learner_email = session_obj.learner.email
+        project_names = [session_obj.coaching_session.batch.project.name]
         session_details = {
-            "learner_name": session_learner_name,
+            "id": session_id,
+            "coach": session_coach_name.title(),
+            "coach_email": session_obj.availibility.coach.email,
             "start_time": session_start_time,
             "end_time": session_end_time,
+            "sessions": [
+                {
+                    "learner_name": session_learner_name,
+                    "learner_email" : session_learner_email,
+                    "start_time": session_start_time,
+                    "end_time": session_end_time,
+                }
+            ],
+            "project_names": project_names,
         }
         for conflict_id in conflicts:
             conflict_obj = SchedularSessions.objects.get(id=conflict_id)
             conflict_start_time = conflict_obj.availibility.start_time
             conflict_end_time = conflict_obj.availibility.end_time
             conflict_learner_name = conflict_obj.learner.name
+            conflict_learner_email = conflict_obj.learner.email
+            project_name = conflict_obj.coaching_session.batch.project.name
             conflict_details = {
                 "learner_name": conflict_learner_name,
+                "learner_email" : conflict_learner_email,
                 "start_time": conflict_start_time,
                 "end_time": conflict_end_time,
             }
-            result.append(
-                {
-                    "id": conflict_id,
-                    "session": session_details,
-                    "conflicting_with_session": conflict_details,
-                    "coach": session_coach_name,
-                }
-            )
+            session_details["sessions"].append(conflict_details)
+            session_details["project_names"].append(project_name)
+        result.append(session_details)
     return result
 
 
@@ -9131,17 +9139,29 @@ def new_graph(request, batch_id, competency_id, behavior_id):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def get_booking_id_of_session(request):
-    coaching_session_order = request.data.get('coaching_session_order') 
-    project_id  = request.data.get('project_id')
-    email = request.data.get('email')
-    schedular_batches  = SchedularBatch.objects.filter(learners__email = email, project__unique_id = project_id)
+    coaching_session_order = request.data.get("coaching_session_order")
+    project_id = request.data.get("project_id")
+    email = request.data.get("email")
+    schedular_batches = SchedularBatch.objects.filter(
+        learners__email=email, project__unique_id=project_id
+    )
     if schedular_batches.exists():
-        print(coaching_session_order, type(coaching_session_order), schedular_batches.first())
-        coaching_sessions  = CoachingSession.objects.filter(order=coaching_session_order,batch =schedular_batches.first())
+        print(
+            coaching_session_order,
+            type(coaching_session_order),
+            schedular_batches.first(),
+        )
+        coaching_sessions = CoachingSession.objects.filter(
+            order=coaching_session_order, batch=schedular_batches.first()
+        )
         if coaching_sessions.exists():
-            booking_link =  coaching_sessions.first().booking_link
+            booking_link = coaching_sessions.first().booking_link
             splitted_link = booking_link.split("/")
-            return Response({ "booking_unique_id" : splitted_link[-1], "email": email})
-        return Response({"error" : "Failed to verify the user."} ,status=status.HTTP_400_BAD_REQUEST)
+            return Response({"booking_unique_id": splitted_link[-1], "email": email})
+        return Response(
+            {"error": "Failed to verify the user."}, status=status.HTTP_400_BAD_REQUEST
+        )
     else:
-        return Response({"error" : "Failed to verify the user."} ,status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "Failed to verify the user."}, status=status.HTTP_400_BAD_REQUEST
+        )

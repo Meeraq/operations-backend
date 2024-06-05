@@ -9,6 +9,7 @@ from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
 from rest_framework import generics, serializers, status
 from datetime import timedelta, time, datetime, date
+from django.db.models.functions import Concat
 from .models import (
     Course,
     TextLesson,
@@ -38,6 +39,7 @@ from .models import (
     CoachingSessionsFeedbackResponse,
     CttFeedback,
     CttFeedbackResponse,
+    NudgeResources,
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -76,6 +78,9 @@ from .serializers import (
     FeedbackDepthOneSerializer,
     LessonSerializerForLiveSessionDateTime,
     CttFeedbackDepthOneSerializer,
+    NudgeResourcesSerializer,
+    NudgeResourcesSerializerDepthOne,
+    NudgeResourcesSerializerDepthOneProjectNames,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -117,7 +122,8 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
-from django.db.models import Max, Q
+from django.db.models import Max, Q, CharField
+from django.db.models import Value
 import environ
 import uuid
 import logging
@@ -338,7 +344,7 @@ def create_lessons_for_batch(batch):
                 session_name = "Mentoring session"
             elif coaching_session.session_type == "action_coaching_session":
                 session_name = "Action Coaching Session"
-                
+
             new_lesson = Lesson.objects.create(
                 course=course,
                 name=f"{session_name} {coaching_session.coaching_session_number}",
@@ -638,6 +644,83 @@ def create_new_nudge(request):
         serializer = NudgeSerializer(nudge_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def get_all_nudge_resources(request):
+    nudges_resources = NudgeResources.objects.all().order_by("-created_at")
+    all_resources = []
+    for nudge_resource in nudges_resources:
+        project_names = set()
+        nudges = Nudge.objects.filter(nudge_resources=nudge_resource)
+        for nudge in nudges:
+            project_names.add(nudge.batch.project.name)
+
+        serializer = NudgeResourcesSerializerDepthOne(nudge_resource)
+        all_resources.append({**serializer.data, "project_names": list(project_names)})
+    return Response(all_resources)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def create_new_nudge_resources(request):
+
+    serializer = NudgeResourcesSerializer(data=request.data)
+
+    if serializer.is_valid():
+        nudge_instance = serializer.save()
+
+        serializer = NudgeResourcesSerializer(nudge_instance)
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def update_nudge_resource(request, nudge_id):
+    try:
+        nudge_resource = NudgeResources.objects.get(id=nudge_id)
+    except NudgeResources.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if "status" in request.data:
+        # Update only the status
+        nudge_resource.status = request.data["status"]
+        nudge_resource.save()
+        return Response({"status": nudge_resource.status})
+
+    serializer = NudgeResourcesSerializer(
+        nudge_resource, data=request.data, partial=True
+    )
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def delete_nudge_resource(request):
+    try:
+        nudge_id = request.data.get("id")
+        nudge_resource = NudgeResources.objects.get(id=nudge_id)
+        nudge_resource.delete()
+        return Response(
+            {"message": "Nudge resource deleted successfully!"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete nudge resource"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["PUT"])
@@ -2547,7 +2630,7 @@ class AssignCourseTemplateToBatch(APIView):
                     lesson=facilitator_lesson_creation,
                 )
                 assessment_creation = False
-                
+
                 if batch.project.pre_assessment:
                     assessment_creation = True
                     lesson1 = Lesson.objects.create(
@@ -2558,9 +2641,7 @@ class AssignCourseTemplateToBatch(APIView):
                         # Duplicate specific lesson types
                         order=2,
                     )
-                    assessment1 = Assessment.objects.create(
-                        lesson=lesson1, type="pre"
-                    )
+                    assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -4330,7 +4411,10 @@ def get_released_certificates_for_learner(request, learner_id):
 def get_all_nudges_for_that_learner(request, learner_id):
     try:
         nudges = Nudge.objects.filter(
-            Q(is_sent=True), Q(is_switched_on=True),Q(batch__learners__id=learner_id) | Q(caas_project__engagement__learner__id=learner_id)
+            Q(is_sent=True),
+            Q(is_switched_on=True),
+            Q(batch__learners__id=learner_id)
+            | Q(caas_project__engagement__learner__id=learner_id),
         ).distinct()
         serializer = NudgeSerializer(nudges, many=True)
         return Response({"nudges": serializer.data})
