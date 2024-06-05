@@ -650,13 +650,17 @@ def create_new_nudge(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
 @transaction.atomic
 def get_all_nudge_resources(request):
-    nudges = NudgeResources.objects.all().annotate(
-        project_names=Concat(
-            'nudge__batch__project__name', Value(', '), output_field=CharField()
-        )
-    ).order_by('-created_at')  # ordering te data
-    serializer = NudgeResourcesSerializerDepthOneProjectNames(nudges, many=True)
-    return Response(serializer.data)
+    nudges_resources = NudgeResources.objects.all().order_by("-created_at")
+    all_resources = []
+    for nudge_resource in nudges_resources:
+        project_names = set()
+        nudges = Nudge.objects.filter(nudge_resources=nudge_resource)
+        for nudge in nudges:
+            project_names.add(nudge.batch.project.name)
+
+        serializer = NudgeResourcesSerializerDepthOne(nudge_resource)
+        all_resources.append({**serializer.data, "project_names": list(project_names)})
+    return Response(all_resources)
 
 
 @api_view(["POST"])
@@ -684,9 +688,9 @@ def update_nudge_resource(request, nudge_id):
     except NudgeResources.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    if 'status' in request.data:
+    if "status" in request.data:
         # Update only the status
-        nudge_resource.status = request.data['status']
+        nudge_resource.status = request.data["status"]
         nudge_resource.save()
         return Response({"status": nudge_resource.status})
 
@@ -698,12 +702,13 @@ def update_nudge_resource(request, nudge_id):
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
 @transaction.atomic
 def delete_nudge_resource(request):
     try:
-        nudge_id=request.data.get('id')
+        nudge_id = request.data.get("id")
         nudge_resource = NudgeResources.objects.get(id=nudge_id)
         nudge_resource.delete()
         return Response(
