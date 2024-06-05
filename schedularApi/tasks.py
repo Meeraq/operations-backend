@@ -2130,6 +2130,7 @@ def celery_send_unbooked_coaching_session_mail(data):
         date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
         formatted_date = date_obj.strftime("%d %B %Y")
         session_type = data.get("session_type", "")
+        
         for participant in participants:
             try:
                 learner_name = Learner.objects.get(email=participant).name
@@ -2139,9 +2140,6 @@ def celery_send_unbooked_coaching_session_mail(data):
             send_mail_templates(
                 "seteventlink.html",
                 [participant],
-                # "Meeraq -Book Laser Coaching Session"
-                # if session_type == "laser_coaching_session"
-                # else "Meeraq - Book Mentoring Session",
                 f"{project_name} | Book Individual 1:1 coaching sessions",
                 {
                     "name": learner_name,
@@ -2152,6 +2150,68 @@ def celery_send_unbooked_coaching_session_mail(data):
                 [],
             )
             sleep(5)
+    except Exception as e:
+        print(f"Error occurred while sending unbooked coaching email : {e}")
+
+
+
+@shared_task
+def celery_send_unbooked_coaching_session_whatsapp_message(data):
+    try:
+        project_name = data.get("project_name", "")
+        participants = data.get("participants", [])
+        booking_link = data.get("bookingLink", "")
+        coaching_session = CoachingSession.objects.get(booking_link=booking_link)
+        path_parts = booking_link.split("/")
+        booking_id = path_parts[-1]
+        expiry_date = coaching_session.expiry_date.strftime(
+            "%d-%m-%Y"
+        )
+        session_name = (
+            coaching_session.session_type.replace(
+                "_", " "
+            ).capitalize()
+            if not coaching_session.session_type
+            == "laser_coaching_session"
+            else "Coaching Session"
+            + " "
+            + str(coaching_session.coaching_session_number)
+        )
+        for participant in participants:
+            try:
+                learner = Learner.objects.get(email=participant)
+            except:
+                continue
+
+            send_whatsapp_message_template(
+                learner.phone,
+                {
+                    "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value":learner.name,
+                        },
+                        {
+                            "name": "session_name",
+                            "value": session_name,
+                        },
+                        {
+                            "name": "project_name",
+                            "value": project_name,
+                        },
+                        {
+                            "name": "1",
+                            "value": booking_id,
+                        },
+                        {
+                            "name": "expiry_date",
+                            "value": expiry_date,
+                        },
+                    ],
+                    "template_name": "participant_slot_booking_reminder_for_skill_training_sessions",
+                },
+            )
     except Exception as e:
         print(f"Error occurred while sending unbooked coaching email : {e}")
 
