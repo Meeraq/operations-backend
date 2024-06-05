@@ -45,6 +45,7 @@ from assessmentApi.models import (
     ObserverResponse,
     ParticipantObserverType,
     Competency,
+    ParticipantReleasedResults,
 )
 from courses.models import (
     Course,
@@ -74,6 +75,7 @@ from zohoapi.tasks import get_access_token, organization_id, base_url
 from courses.serializers import NudgeSerializer
 from api.models import Role, Profile
 import matplotlib.pyplot as plt
+
 env = environ.Env()
 environ.Env.read_env()
 import random
@@ -95,6 +97,7 @@ def swap_positions(length):
         orig: swapped for orig, swapped in zip(range(1, length + 1), numbers)
     }
     return swapped_dict
+
 
 def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp):
     comp_labels = list(competency_percentage.keys())
@@ -2127,6 +2130,7 @@ def celery_send_unbooked_coaching_session_mail(data):
         date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
         formatted_date = date_obj.strftime("%d %B %Y")
         session_type = data.get("session_type", "")
+        
         for participant in participants:
             try:
                 learner_name = Learner.objects.get(email=participant).name
@@ -2136,9 +2140,6 @@ def celery_send_unbooked_coaching_session_mail(data):
             send_mail_templates(
                 "seteventlink.html",
                 [participant],
-                # "Meeraq -Book Laser Coaching Session"
-                # if session_type == "laser_coaching_session"
-                # else "Meeraq - Book Mentoring Session",
                 f"{project_name} | Book Individual 1:1 coaching sessions",
                 {
                     "name": learner_name,
@@ -2149,6 +2150,68 @@ def celery_send_unbooked_coaching_session_mail(data):
                 [],
             )
             sleep(5)
+    except Exception as e:
+        print(f"Error occurred while sending unbooked coaching email : {e}")
+
+
+
+@shared_task
+def celery_send_unbooked_coaching_session_whatsapp_message(data):
+    try:
+        project_name = data.get("project_name", "")
+        participants = data.get("participants", [])
+        booking_link = data.get("bookingLink", "")
+        coaching_session = CoachingSession.objects.get(booking_link=booking_link)
+        path_parts = booking_link.split("/")
+        booking_id = path_parts[-1]
+        expiry_date = coaching_session.expiry_date.strftime(
+            "%d-%m-%Y"
+        )
+        session_name = (
+            coaching_session.session_type.replace(
+                "_", " "
+            ).capitalize()
+            if not coaching_session.session_type
+            == "laser_coaching_session"
+            else "Coaching Session"
+            + " "
+            + str(coaching_session.coaching_session_number)
+        )
+        for participant in participants:
+            try:
+                learner = Learner.objects.get(email=participant)
+            except:
+                continue
+
+            send_whatsapp_message_template(
+                learner.phone,
+                {
+                    "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value":learner.name,
+                        },
+                        {
+                            "name": "session_name",
+                            "value": session_name,
+                        },
+                        {
+                            "name": "project_name",
+                            "value": project_name,
+                        },
+                        {
+                            "name": "1",
+                            "value": booking_id,
+                        },
+                        {
+                            "name": "expiry_date",
+                            "value": expiry_date,
+                        },
+                    ],
+                    "template_name": "participant_slot_booking_reminder_for_skill_training_sessions",
+                },
+            )
     except Exception as e:
         print(f"Error occurred while sending unbooked coaching email : {e}")
 
@@ -3677,10 +3740,48 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
 
 
 @shared_task
-def automate_result_change(participant_with_not_released_results, assessment):
+def result_sending(assessment):
     try:
-        for participant in participant_with_not_released_results:
-            try:
+        if assessment.assessment_type == "self":
+            (
+                participant_released_results,
+                created,
+            ) = ParticipantReleasedResults.objects.get_or_create(assessment=assessment)
+            participant_with_released_results = []
+            if not created:
+                participant_with_released_results = (
+                    participant_released_results.participants.all()
+                )
+
+            participant_with_not_released_results = []
+            for participant_observer in assessment.participants_observers.all():
+                participant_response_present = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant=participant_observer.participant,
+                ).exists()
+                if participant_response_present:
+                    if (
+                        participant_observer.participant
+                        not in participant_with_released_results
+                    ):
+                        participant_with_not_released_results.append(
+                            participant_observer.participant
+                        )
+                        participant_released_results.participants.add(
+                            participant_observer.participant
+                        )
+
+            participant_released_results.save()
+
+            if len(assessment.participants_observers.all()) == (
+                len(participant_with_released_results)
+                + len(participant_with_not_released_results)
+            ):
+                assessment.result_released = True
+                assessment.save()
+
+            for participant in participant_with_not_released_results:
+
                 encoded_image = None
                 compentency_with_description = None
                 if (
@@ -3714,7 +3815,10 @@ def automate_result_change(participant_with_not_released_results, assessment):
                     [],
                 )
                 sleep(5)
-            except Exception as e:
-                print(str(e))
+
+        else:
+            assessment.result_released = True
+            assessment.save()
+
     except Exception as e:
         print(str(e))
