@@ -3813,7 +3813,7 @@ def send_unbooked_coaching_session_mail(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_unbooked_coaching_session_whatsapp_message(request):
     try:
-        celery_send_unbooked_coaching_session_whatsapp_message(request.data)
+        celery_send_unbooked_coaching_session_whatsapp_message.delay(request.data)
         return Response({"message": "Whatsapp message sent to participants."}, status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
