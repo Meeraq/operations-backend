@@ -100,7 +100,7 @@ from schedularApi.tasks import (
     send_assessment_invitation_mail_on_click,
     send_email_reminder_assessment_on_click,
     send_whatsapp_reminder_assessment_on_click,
-    automate_result_change,
+    result_sending,
     generate_graph_for_participant,
     generate_graph_for_participant_for_post_assessment,
     generate_graph_for_pre_assessment,
@@ -1155,37 +1155,51 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
+            try:
+                if assessment.assessment_type == "self" and assessment.automated_result:
+                    encoded_image = None
+                    compentency_with_description = None
+                    if (
+                        assessment.assessment_timing == "pre"
+                        or assessment.assessment_timing == "none"
+                    ):
+                        (
+                            encoded_image,
+                            compentency_with_description,
+                        ) = generate_graph_for_participant(
+                            participant, assessment_id, assessment
+                        )
+                    elif assessment.assessment_timing == "post":
+                        (
+                            encoded_image,
+                            compentency_with_description,
+                        ) = generate_graph_for_participant_for_post_assessment(
+                            participant, assessment_id, assessment
+                        )
+                    send_mail_templates(
+                        "assessment/air_india_report_mail.html",
+                        [participant.email],
+                        "Meeraq Assessment Report",
+                        {
+                            "name": participant.name.title(),
+                            "image_base64": encoded_image,
+                            "compentency_with_description": compentency_with_description,
+                            "assessment_timing": assessment.assessment_timing,
+                            "assessment_name": assessment.participant_view_name,
+                        },
+                        [],
+                    )
+                    (
+                        participant_released_results,
+                        created,
+                    ) = ParticipantReleasedResults.objects.get_or_create(
+                        assessment=assessment
+                    )
+                    participant_released_results.participants.add(participant)
+                    participant_released_results.save()
+            except Exception as e:
+                print(str(e))
 
-            if assessment.assessment_timing != "none" and assessment.automated_result:
-                encoded_image = None
-                compentency_with_description = None
-                if assessment.assessment_timing == "pre":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant(
-                        participant, assessment_id, assessment
-                    )
-                elif assessment.assessment_timing == "post":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant_for_post_assessment(
-                        participant, assessment_id, assessment
-                    )
-                send_mail_templates(
-                    "assessment/air_india_report_mail.html",
-                    [participant.email],
-                    "Meeraq Assessment Report",
-                    {
-                        "name": participant.name.title(),
-                        "image_base64": encoded_image,
-                        "compentency_with_description": compentency_with_description,
-                        "assessment_timing": assessment.assessment_timing,
-                        "assessment_name": assessment.participant_view_name,
-                    },
-                    [],
-                )
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -3789,57 +3803,11 @@ class ReleaseResults(APIView):
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-            if assessment.assessment_type == "self":
-                (
-                    participant_released_results,
-                    created,
-                ) = ParticipantReleasedResults.objects.get_or_create(
-                    assessment=assessment
-                )
-                participant_with_released_results = []
-                if not created:
-                    participant_with_released_results = (
-                        participant_released_results.participants.all()
-                    )
-
-                participant_with_not_released_results = []
-                for participant_observer in assessment.participants_observers.all():
-                    participant_response_present = ParticipantResponse.objects.filter(
-                        assessment=assessment,
-                        participant=participant_observer.participant,
-                    ).exists()
-                    if participant_response_present:
-                        if (
-                            participant_observer.participant
-                            not in participant_with_released_results
-                        ):
-                            participant_with_not_released_results.append(
-                                participant_observer.participant
-                            )
-                            participant_released_results.participants.add(
-                                participant_observer.participant
-                            )
-
-                participant_released_results.save()
-
-                if len(assessment.participants_observers.all()) == (
-                    len(participant_with_released_results)
-                    + len(participant_with_not_released_results)
-                ):
-                    assessment.result_released = True
-                    assessment.save()
-
-                automate_result_change.delay(
-                    participant_with_not_released_results, assessment
-                )
-
-            else:
-                assessment.result_released = True
-                assessment.save()
+            result_sending.delay(assessment)
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
-                    "success": "Successfully Released Results",
+                    "success": "The process to release the assessment results has started successfully.",
                     "assessment_data": serializer.data,
                 }
             )
@@ -3863,56 +3831,13 @@ class AutomateResultChange(APIView):
             else:
                 assessment.automated_result = True
             assessment.save()
-            if assessment.assessment_type == "self" and assessment.automated_result:
-                (
-                    participant_released_results,
-                    created,
-                ) = ParticipantReleasedResults.objects.get_or_create(
-                    assessment=assessment
-                )
-                participant_with_released_results = []
-                if not created:
-                    participant_with_released_results = (
-                        participant_released_results.participants.all()
-                    )
+            if assessment.automated_result:
+                result_sending.delay(assessment)
 
-                participant_with_not_released_results = []
-                for participant_observer in assessment.participants_observers.all():
-                    participant_response_present = ParticipantResponse.objects.filter(
-                        assessment=assessment,
-                        participant=participant_observer.participant,
-                    ).exists()
-                    if participant_response_present:
-                        if (
-                            participant_observer.participant
-                            not in participant_with_released_results
-                        ):
-                            participant_with_not_released_results.append(
-                                participant_observer.participant
-                            )
-                            participant_released_results.participants.add(
-                                participant_observer.participant
-                            )
-
-                participant_released_results.save()
-
-                if len(assessment.participants_observers.all()) == (
-                    len(participant_with_released_results)
-                    + len(participant_with_not_released_results)
-                ):
-                    assessment.result_released = True
-                    assessment.save()
-
-                automate_result_change.delay(
-                    participant_with_not_released_results, assessment
-                )
-            else:
-                assessment.result_released = True
-                assessment.save()
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
-                    "success": "Successfully Released Results",
+                    "message": "The process to release the assessment results has started successfully.",
                     "assessment_data": serializer.data,
                 }
             )
