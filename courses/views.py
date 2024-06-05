@@ -80,6 +80,7 @@ from .serializers import (
     CttFeedbackDepthOneSerializer,
     NudgeResourcesSerializer,
     NudgeResourcesSerializerDepthOne,
+    NudgeResourcesSerializerDepthOneProjectNames,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -654,7 +655,7 @@ def get_all_nudge_resources(request):
             'nudge__batch__project__name', Value(', '), output_field=CharField()
         )
     ).order_by('-created_at')  # ordering te data
-    serializer = NudgeResourcesSerializerDepthOne(nudges, many=True)
+    serializer = NudgeResourcesSerializerDepthOneProjectNames(nudges, many=True)
     return Response(serializer.data)
 
 

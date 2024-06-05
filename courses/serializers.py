@@ -71,6 +71,14 @@ class NudgeResourcesSerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+class NudgeResourcesSerializerDepthOneProjectNames(serializers.ModelSerializer):
+    project_names = serializers.CharField()
+    class Meta:
+        model = NudgeResources
+        fields = "__all__"
+        depth = 1
+
+
 
 class TextLessonCreateSerializer(serializers.ModelSerializer):
     lesson = LessonSerializer()
