@@ -279,8 +279,8 @@ class ThinkificLessonCompleted(models.Model):
 class NudgeResources(models.Model):
 
     STATUS_CHOICES = [
-        ("draft", "Draft"),
-        ("public", "Public"),
+        ("Draft", "Draft"),
+        ("Open", "Open"),
     ]
 
     name = models.CharField(max_length=255)
@@ -292,7 +292,7 @@ class NudgeResources(models.Model):
         Curriculum, on_delete=models.CASCADE, blank=True, null=True
     )
     status = models.CharField(
-        max_length=50, choices=STATUS_CHOICES, blank=True, null=True
+        max_length=50, choices=STATUS_CHOICES, blank=True, null=True,default="Draft"  
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

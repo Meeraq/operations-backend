@@ -99,6 +99,10 @@ urlpatterns = [
         name="lesson-list",
     ),
     path("nudges/create", views.create_new_nudge),
+    path("curriculum-nudges/create", views.create_new_nudge_resources),
+    path("curriculum-nudges/<int:nudge_id>/edit", views.update_nudge_resource),
+    path("curriculum-nudges/delete", views.delete_nudge_resource),
+    path("nudge-resources/", views.get_all_nudge_resources),
     path("nudges/<int:nudge_id>/update/", views.update_nudge),
     path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
     path(

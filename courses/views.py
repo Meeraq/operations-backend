@@ -9,6 +9,7 @@ from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
 from rest_framework import generics, serializers, status
 from datetime import timedelta, time, datetime, date
+from django.db.models.functions import Concat
 from .models import (
     Course,
     TextLesson,
@@ -121,7 +122,7 @@ from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
 from django.db.models import Max, Q, CharField
-from django.db.models import ArrayAgg
+from django.db.models import Value
 import environ
 import uuid
 import logging
@@ -644,20 +645,17 @@ def create_new_nudge(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["POST"])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
 @transaction.atomic
 def get_all_nudge_resources(request):
-
-    nudges = NudgeResources.objects.annotate(
-        nudge_names=ArrayAgg(
-            "nudge__batch__project__name", distinct=True, output_field=CharField()
+    nudges = NudgeResources.objects.all().annotate(
+        project_names=Concat(
+            'nudge__batch__project__name', Value(', '), output_field=CharField()
         )
-    )
-
+    ).order_by('-created_at')  # ordering te data
     serializer = NudgeResourcesSerializerDepthOne(nudges, many=True)
-
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(serializer.data)
 
 
 @api_view(["POST"])
@@ -670,7 +668,7 @@ def create_new_nudge_resources(request):
     if serializer.is_valid():
         nudge_instance = serializer.save()
 
-        serializer = NudgeSerializer(nudge_instance)
+        serializer = NudgeResourcesSerializer(nudge_instance)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -684,6 +682,13 @@ def update_nudge_resource(request, nudge_id):
         nudge_resource = NudgeResources.objects.get(id=nudge_id)
     except NudgeResources.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if 'status' in request.data:
+        # Update only the status
+        nudge_resource.status = request.data['status']
+        nudge_resource.save()
+        return Response({"status": nudge_resource.status})
+
     serializer = NudgeResourcesSerializer(
         nudge_resource, data=request.data, partial=True
     )
@@ -692,21 +697,20 @@ def update_nudge_resource(request, nudge_id):
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-@api_view(["PUT"])
+@api_view(["DELETE"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
 @transaction.atomic
-def delete_nudge_resource(request, nudge_id):
+def delete_nudge_resource(request):
     try:
+        nudge_id=request.data.get('id')
         nudge_resource = NudgeResources.objects.get(id=nudge_id)
-
         nudge_resource.delete()
-
         return Response(
             {"message": "Nudge resource deleted successfully!"},
             status=status.HTTP_200_OK,
         )
     except Exception as e:
+        print(str(e))
         return Response(
             {"error": "Failed to delete nudge resource"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
