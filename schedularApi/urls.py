@@ -15,6 +15,7 @@ urlpatterns = [
     path("create-gmsheet/", views.create_gmsheet, name="create_gmsheet"),
     path("update-status/", views.update_status, name="update-status"),
     path("update-gmsheet/<int:id>/", views.update_gmsheet),
+    path("gmsheet/<int:id>/offerings/add/", views.add_offerings),
     path(
         "accept-gmsheet/<int:pk>/",
         views.update_is_accepted_status,
@@ -64,6 +65,7 @@ urlpatterns = [
         name="schedular-batch-list",
     ),
     path("batch-details/<str:batch_id>/", views.get_batch_calendar),
+    path("project/<int:project_id>/batch-calendar/", views.get_project_batch_calendar),
     path(
         "live-sessions/<int:live_session_id>/update/",
         views.update_live_session,
