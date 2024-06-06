@@ -347,6 +347,7 @@ class Facilitator(models.Model):
     education = models.JSONField(default=list, blank=True)
     corporate_experience = models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
+    remarks = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)

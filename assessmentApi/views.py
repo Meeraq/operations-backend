@@ -3803,7 +3803,7 @@ class ReleaseResults(APIView):
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-            result_sending.delay(assessment)
+            result_sending.delay(assessment_id)
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -3832,7 +3832,7 @@ class AutomateResultChange(APIView):
                 assessment.automated_result = True
             assessment.save()
             if assessment.automated_result:
-                result_sending.delay(assessment)
+                result_sending.delay(assessment_id)
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(

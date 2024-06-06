@@ -4458,6 +4458,7 @@ def add_facilitator(request):
     fees_per_hour = request.data.get("fees_per_hour", "")
     fees_per_day = request.data.get("fees_per_day", "")
     topic = json.loads(request.data["topic"])
+    remarks = request.data.get("remarks", "")
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
     education_pic = request.data.get("education_pic", None)
@@ -4511,6 +4512,7 @@ def add_facilitator(request):
                 email=email,
                 phone=phone,
                 city=city,
+                remarks=remarks,
                 country=country,
                 phone_country_code=phone_country_code,
                 level=level,
@@ -4576,9 +4578,7 @@ def add_facilitator(request):
 
     except IntegrityError as e:
         print(str(e))
-        return Response(
-            {"error": "A facilitator user with this email already exists."}, status=400
-        )
+        return Response({"error": "Failed to add facilitator."}, status=400)
 
     except Exception as e:
         print(str(e))

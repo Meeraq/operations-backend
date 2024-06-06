@@ -5,6 +5,7 @@ from schedularApi.models import (
     LiveSession,
     CoachingSession,
     SchedularSessions,
+    SchedularProject
 )
 import os
 from django.core.exceptions import ValidationError
@@ -277,12 +278,10 @@ class ThinkificLessonCompleted(models.Model):
 
 
 class NudgeResources(models.Model):
-
     STATUS_CHOICES = [
         ("Draft", "Draft"),
         ("Open", "Open"),
     ]
-
     name = models.CharField(max_length=255)
     content = models.TextField()
     file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
@@ -296,7 +295,8 @@ class NudgeResources(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    caas_project_assigned = models.ManyToManyField(Project,blank=True, null=True)
+    skill_project_assigned =models.ManyToManyField(SchedularProject,blank=True, null=True)
     def __str__(self):
         return self.name
 
