@@ -2886,7 +2886,7 @@ def schedule_session_fixed(request):
             batch = coaching_session.batch
             session_type = coaching_session.session_type
 
-            learner = get_object_or_404(Learner, email=participant_email)
+            learner = Learner.objects.get(email=participant_email)
             if learner not in batch.learners.all():
                 return Response(
                     {"error": "Email not found. Please use the registered Email"},
@@ -3147,11 +3147,18 @@ def schedule_session_fixed(request):
                     status=status.HTTP_201_CREATED,
                 )
             else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                print(serializer.errors)
+                return Response({"error": f"Failed to book the session."}, status=status.HTTP_400_BAD_REQUEST)
+
+    except Learner.DoesNotExist:
+        return Response(
+            {"error": f"Email not found."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     except Exception as e:
         return Response(
-            {"error": f"Failed to book the session. {str(e)}"},
+            {"error": f"Failed to book the session."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

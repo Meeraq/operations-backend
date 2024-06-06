@@ -656,27 +656,53 @@ def get_all_nudge_resources(request):
         project_names = set()
         nudges = Nudge.objects.filter(nudge_resources=nudge_resource)
         for nudge in nudges:
-            project_names.add(nudge.batch.project.name)
+            if nudge.batch:
+                project_names.add(nudge.batch.project.name)
+            elif nudge.caas_project:
+                project_names.add(nudge.caas_project.name)
 
         serializer = NudgeResourcesSerializerDepthOne(nudge_resource)
         all_resources.append({**serializer.data, "project_names": list(project_names)})
     return Response(all_resources)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def get_all_nudge_resources_by_project(request, project_or_batch_id, project_type):
+    nudges_resources = None
+    if project_type == "caas":
+        nudges_resources = NudgeResources.objects.filter(
+            caas_project_assigned__id=project_or_batch_id
+        ).order_by("-created_at")
+    elif project_type == "skill_training":
+        batch = SchedularBatch.objects.get(id= project_or_batch_id)
+        nudges_resources = NudgeResources.objects.filter(
+            skill_project_assigned__id=batch.project.id
+        ).order_by("-created_at")
+
+    serializer = NudgeResourcesSerializerDepthOne(nudges_resources,many=True)
+        
+    return Response(serializer.data)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
 @transaction.atomic
 def create_new_nudge_resources(request):
+    try:
 
-    serializer = NudgeResourcesSerializer(data=request.data)
+        serializer = NudgeResourcesSerializer(data=request.data)
 
-    if serializer.is_valid():
-        nudge_instance = serializer.save()
+        if serializer.is_valid():
+            nudge_instance = serializer.save()
 
-        serializer = NudgeResourcesSerializer(nudge_instance)
+            serializer = NudgeResourcesSerializer(nudge_instance)
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        print(str(e))
 
 
 @api_view(["PUT"])
@@ -742,6 +768,14 @@ def update_nudge(request, nudge_id):
 def download_nudge_file(request, nudge_id):
     nudge_obj = get_object_or_404(Nudge, id=nudge_id)
     serializer = NudgeSerializer(nudge_obj)
+    return download_file_response(serializer.data["file"])
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def download_nudge_resource_file(request, nudge_id):
+    nudge_obj = get_object_or_404(NudgeResources, id=nudge_id)
+    serializer = NudgeResourcesSerializer(nudge_obj)
     return download_file_response(serializer.data["file"])
 
 
@@ -4435,6 +4469,19 @@ def get_nudge_data(request, nudge_id):
         serializer = NudgeSerializer(nudge)
         return Response({"nudge": serializer.data})
     except Nudge.DoesNotExist:
+        return JsonResponse({"error": "Nudge not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nudge_resource_data(request, nudge_id):
+    try:
+        nudge = NudgeResources.objects.get(id=nudge_id)
+        serializer = NudgeResourcesSerializer(nudge)
+        return Response({"nudge": serializer.data})
+    except NudgeResources.DoesNotExist:
         return JsonResponse({"error": "Nudge not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)

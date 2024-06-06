@@ -106,6 +106,14 @@ urlpatterns = [
     path("nudges/<int:nudge_id>/update/", views.update_nudge),
     path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
     path(
+        "nudge-resources/<int:nudge_id>/file/download/",
+        views.download_nudge_resource_file,
+    ),
+    path(
+        "get-all-nudge-resources-by-project/<int:project_or_batch_id>/<str:project_type>/",
+        views.get_all_nudge_resources_by_project,
+    ),
+    path(
         "<str:instance_type>/<int:instance_id>/update-nudge-date-frequency/",
         views.add_nudges_date_frequency_to_batch,
     ),
@@ -456,6 +464,10 @@ urlpatterns = [
     path(
         "get-nudge-data/<str:nudge_id>/",
         views.get_nudge_data,
+    ),
+    path(
+        "get-nudge-resource-data/<str:nudge_id>/",
+        views.get_nudge_resource_data,
     ),
     path(
         "update-completion-nudge-status/<int:nudge_id>/",
