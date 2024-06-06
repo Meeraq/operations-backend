@@ -642,23 +642,23 @@ def create_gmsheet(request):
                             )
 
                 # Sending email notification
-                # send_mail_templates(
-                #     "leader_emails/gm_sheet_created.html",
-                #     (
-                #         ["sujata@meeraq.com"]
-                #         if env("ENVIRONMENT") == "PRODUCTION"
-                #         else ["naveen@meeraq.com"]
-                #     ),  # Update with the recipient's email address
-                #     "New GM Sheet created",
-                #     {
-                #         "projectName": gm_sheet.project_name,
-                #         "clientName": gm_sheet.client_name,
-                #         "startdate": gm_sheet.start_date,
-                #         "projectType": gm_sheet.project_type,
-                #         "salesName": gm_sheet.sales.name,
-                #     },
-                #     [],  # No BCC
-                # )
+                send_mail_templates(
+                    "leader_emails/gm_sheet_created.html",
+                    (
+                        ["sujata@meeraq.com"]
+                        if env("ENVIRONMENT") == "PRODUCTION"
+                        else ["naveen@meeraq.com"]
+                    ),  # Update with the recipient's email address
+                    "New GM Sheet created",
+                    {
+                        "projectName": gm_sheet.project_name,
+                        "clientName": gm_sheet.client_name,
+                        "startdate": gm_sheet.start_date,
+                        "projectType": gm_sheet.project_type,
+                        "salesName": gm_sheet.sales.name,
+                    },
+                    [],  # No BCC
+                )
 
                 return Response(
                     gm_sheet_serializer.data, status=status.HTTP_201_CREATED
