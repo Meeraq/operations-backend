@@ -786,9 +786,7 @@ def update_gmsheet(request, id):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
-            return Response(
-               gm_sheet_serializer.data, status=status.HTTP_200_OK
-            )
+            return Response(gm_sheet_serializer.data, status=status.HTTP_200_OK)
         else:
             print("hey", gm_sheet_serializer.errors)
             return Response(
@@ -1790,25 +1788,35 @@ from collections import Counter
     [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
 )
 def get_project_batch_calendar(request, project_id):
-    coaching_sessions = CoachingSession.objects.filter(batch__project__id=project_id).annotate(
+    coaching_sessions = CoachingSession.objects.filter(
+        batch__project__id=project_id
+    ).annotate(
         unique_key=Concat(
-        F('session_type'),
-        Value('_'),
-        F('coaching_session_number'),
-        output_field=CharField()
+            F("session_type"),
+            Value("_"),
+            F("coaching_session_number"),
+            output_field=CharField(),
         )
     )
-    learners_count = Learner.objects.filter(schedularbatch__project__id=project_id).distinct().count()
+    learners_count = (
+        Learner.objects.filter(schedularbatch__project__id=project_id)
+        .distinct()
+        .count()
+    )
     coaching_sessions_map = defaultdict(list)
     for session in coaching_sessions:
         coaching_sessions_map[session.unique_key].append(session.id)
 
     count_by_unique_key = Counter()
     for unique_key, session_ids in coaching_sessions_map.items():
-        count = SchedularSessions.objects.filter(coaching_session__id__in=session_ids).count()
-        count_by_unique_key[unique_key] = count    
+        count = SchedularSessions.objects.filter(
+            coaching_session__id__in=session_ids
+        ).count()
+        count_by_unique_key[unique_key] = count
 
-    return Response({'learners_count' : learners_count , 'sessions_booked_count' : count_by_unique_key})
+    return Response(
+        {"learners_count": learners_count, "sessions_booked_count": count_by_unique_key}
+    )
 
 
 @api_view(["PUT"])
@@ -4994,6 +5002,11 @@ def edit_schedular_project(request, project_id):
 
             prev_pre_assessment = project.pre_assessment
             prev_post_assessment = project.post_assessment
+
+            prev_email_reminder = project.email_reminder
+            prev_whatsapp_reminder = project.whatsapp_reminder
+            prev_calendar_invites = project.calendar_invites
+
             project_details = request.data
             junior_pmo = None
             if "junior_pmo" in project_details:
@@ -5133,6 +5146,23 @@ def edit_schedular_project(request, project_id):
 
                         assessment1.assessment_modal = pre_assessment
                         assessment1.save()
+            try:
+                batches = SchedularBatch.objects.filter(project=project)
+
+                for batch in batches:
+
+                    if not prev_email_reminder == project.email_reminder:
+                        batch.email_reminder = project.email_reminder
+
+                    if not prev_whatsapp_reminder == project.whatsapp_reminder:
+                        batch.whatsapp_reminder = project.whatsapp_reminder
+
+                    if not prev_calendar_invites == project.calendar_invites:
+                        batch.calendar_invites = project.calendar_invites
+
+                    batch.save()
+            except Exception as e:
+                print(str(e))
 
             if not prev_post_assessment == project.post_assessment:
                 for batch in batches:
