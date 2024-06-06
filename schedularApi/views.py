@@ -642,23 +642,23 @@ def create_gmsheet(request):
                             )
 
                 # Sending email notification
-                send_mail_templates(
-                    "leader_emails/gm_sheet_created.html",
-                    (
-                        ["sujata@meeraq.com"]
-                        if env("ENVIRONMENT") == "PRODUCTION"
-                        else ["naveen@meeraq.com"]
-                    ),  # Update with the recipient's email address
-                    "New GM Sheet created",
-                    {
-                        "projectName": gm_sheet.project_name,
-                        "clientName": gm_sheet.client_name,
-                        "startdate": gm_sheet.start_date,
-                        "projectType": gm_sheet.project_type,
-                        "salesName": gm_sheet.sales.name,
-                    },
-                    [],  # No BCC
-                )
+                # send_mail_templates(
+                #     "leader_emails/gm_sheet_created.html",
+                #     (
+                #         ["sujata@meeraq.com"]
+                #         if env("ENVIRONMENT") == "PRODUCTION"
+                #         else ["naveen@meeraq.com"]
+                #     ),  # Update with the recipient's email address
+                #     "New GM Sheet created",
+                #     {
+                #         "projectName": gm_sheet.project_name,
+                #         "clientName": gm_sheet.client_name,
+                #         "startdate": gm_sheet.start_date,
+                #         "projectType": gm_sheet.project_type,
+                #         "salesName": gm_sheet.sales.name,
+                #     },
+                #     [],  # No BCC
+                # )
 
                 return Response(
                     gm_sheet_serializer.data, status=status.HTTP_201_CREATED
@@ -787,13 +787,86 @@ def update_gmsheet(request, id):
                         )
 
             return Response(
-                {"message": "Update Successfully"}, status=status.HTTP_200_OK
+               gm_sheet_serializer.data, status=status.HTTP_200_OK
             )
         else:
             print("hey", gm_sheet_serializer.errors)
             return Response(
                 gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
             )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@transaction.atomic
+def add_offerings(request, id):
+    try:
+        gm_sheet = GmSheet.objects.get(id=id)
+        existing_offerings = Offering.objects.filter(gm_sheet=gm_sheet)
+        is_add_offering = True if existing_offerings.count() == 0 else False
+        # Handle offerings update
+        offerings_data = request.data.get("offerings", [])
+        for offering_data in offerings_data:
+            offering_id = offering_data.get("id")
+            if offering_id:
+                try:
+                    offering_instance = Offering.objects.get(
+                        id=offering_id, gm_sheet=gm_sheet
+                    )
+                    offering_serializer = OfferingSerializer(
+                        offering_instance, data=offering_data, partial=True
+                    )
+                    if offering_serializer.is_valid():
+                        offering_serializer.save()
+                    else:
+                        print(offering_serializer.errors)
+                        return Response(
+                            offering_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                except Offering.DoesNotExist:
+                    return Response(
+                        {"error": "Offering not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                offering_data["gm_sheet"] = gm_sheet.id
+                offering_serializer = OfferingSerializer(data=offering_data)
+                if offering_serializer.is_valid():
+                    offering_serializer.save()
+                else:
+                    print("offering_serializer.errors")
+                    return Response(
+                        offering_serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        if is_add_offering:
+            send_mail_templates(
+                "leader_emails/gm_sheet_created.html",
+                (
+                    ["sujata@meeraq.com"]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),  # Update with the recipient's email address
+                "New GM Sheet created",
+                {
+                    "projectName": gm_sheet.project_name,
+                    "clientName": gm_sheet.client_name,
+                    "startdate": gm_sheet.start_date,
+                    "projectType": gm_sheet.project_type,
+                    "salesName": gm_sheet.sales.name,
+                },
+                [],  # No BCC
+            )
+
+        return Response({"message": "Update Successfully"}, status=status.HTTP_200_OK)
 
     except Exception as e:
         print(str(e))
@@ -3148,7 +3221,10 @@ def schedule_session_fixed(request):
                 )
             else:
                 print(serializer.errors)
-                return Response({"error": f"Failed to book the session."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": f"Failed to book the session."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
     except Learner.DoesNotExist:
         return Response(
@@ -3815,19 +3891,21 @@ def send_unbooked_coaching_session_mail(request):
         return Response(
             {"error": "Failed to send emails."}, status.HTTP_400_BAD_REQUEST
         )
-    
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_unbooked_coaching_session_whatsapp_message(request):
     try:
         celery_send_unbooked_coaching_session_whatsapp_message.delay(request.data)
-        return Response({"message": "Whatsapp message sent to participants."}, status.HTTP_200_OK)
+        return Response(
+            {"message": "Whatsapp message sent to participants."}, status.HTTP_200_OK
+        )
     except Exception as e:
         print(str(e))
         return Response(
             {"error": "Failed to send emails."}, status.HTTP_400_BAD_REQUEST
         )
-
 
 
 @api_view(["GET"])
@@ -8971,6 +9049,7 @@ def batch_competency_movement(request, batch_id, competency_id):
         {"action_item_movement": data, "action_item_counts": action_item_counts}
     )
 
+
 def find_conflicting_sessions():
     coach_conflicts = defaultdict(list)
     current_time = timezone.now()
@@ -9009,7 +9088,11 @@ def find_conflicting_sessions():
     result = []
     for session_id, conflicts in coach_conflicts.items():
         session_obj = SchedularSessions.objects.get(id=session_id)
-        session_coach_name = session_obj.availibility.coach.first_name + " " + session_obj.availibility.coach.last_name
+        session_coach_name = (
+            session_obj.availibility.coach.first_name
+            + " "
+            + session_obj.availibility.coach.last_name
+        )
         session_start_time = session_obj.availibility.start_time
         session_end_time = session_obj.availibility.end_time
         session_learner_name = session_obj.learner.name
@@ -9024,7 +9107,7 @@ def find_conflicting_sessions():
             "sessions": [
                 {
                     "learner_name": session_learner_name,
-                    "learner_email" : session_learner_email,
+                    "learner_email": session_learner_email,
                     "start_time": session_start_time,
                     "end_time": session_end_time,
                 }
@@ -9040,7 +9123,7 @@ def find_conflicting_sessions():
             project_name = conflict_obj.coaching_session.batch.project.name
             conflict_details = {
                 "learner_name": conflict_learner_name,
-                "learner_email" : conflict_learner_email,
+                "learner_email": conflict_learner_email,
                 "start_time": conflict_start_time,
                 "end_time": conflict_end_time,
             }

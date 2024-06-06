@@ -15,6 +15,7 @@ urlpatterns = [
     path("create-gmsheet/", views.create_gmsheet, name="create_gmsheet"),
     path("update-status/", views.update_status, name="update-status"),
     path("update-gmsheet/<int:id>/", views.update_gmsheet),
+    path("gmsheet/<int:id>/offerings/add/", views.add_offerings),
     path(
         "accept-gmsheet/<int:pk>/",
         views.update_is_accepted_status,
