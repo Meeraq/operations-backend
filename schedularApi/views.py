@@ -1781,6 +1781,36 @@ def get_batch_calendar(request, batch_id):
         return Response({"error": "Failed to get data"}, status=400)
 
 
+from django.db.models.functions import Concat
+from collections import Counter
+
+
+@api_view(["GET"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
+def get_project_batch_calendar(request, project_id):
+    coaching_sessions = CoachingSession.objects.filter(batch__project__id=project_id).annotate(
+        unique_key=Concat(
+        F('session_type'),
+        Value('_'),
+        F('coaching_session_number'),
+        output_field=CharField()
+        )
+    )
+    learners_count = Learner.objects.filter(schedularbatch__project__id=project_id).distinct().count()
+    coaching_sessions_map = defaultdict(list)
+    for session in coaching_sessions:
+        coaching_sessions_map[session.unique_key].append(session.id)
+
+    count_by_unique_key = Counter()
+    for unique_key, session_ids in coaching_sessions_map.items():
+        count = SchedularSessions.objects.filter(coaching_session__id__in=session_ids).count()
+        count_by_unique_key[unique_key] = count    
+
+    return Response({'learners_count' : learners_count , 'sessions_booked_count' : count_by_unique_key})
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_live_session(request, live_session_id):

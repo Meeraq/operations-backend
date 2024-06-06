@@ -65,6 +65,7 @@ urlpatterns = [
         name="schedular-batch-list",
     ),
     path("batch-details/<str:batch_id>/", views.get_batch_calendar),
+    path("project/<int:project_id>/batch-calendar/", views.get_project_batch_calendar),
     path(
         "live-sessions/<int:live_session_id>/update/",
         views.update_live_session,
