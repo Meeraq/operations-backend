@@ -3808,19 +3808,21 @@ def send_unbooked_coaching_session_mail(request):
         return Response(
             {"error": "Failed to send emails."}, status.HTTP_400_BAD_REQUEST
         )
-    
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_unbooked_coaching_session_whatsapp_message(request):
     try:
         celery_send_unbooked_coaching_session_whatsapp_message.delay(request.data)
-        return Response({"message": "Whatsapp message sent to participants."}, status.HTTP_200_OK)
+        return Response(
+            {"message": "Whatsapp message sent to participants."}, status.HTTP_200_OK
+        )
     except Exception as e:
         print(str(e))
         return Response(
             {"error": "Failed to send emails."}, status.HTTP_400_BAD_REQUEST
         )
-
 
 
 @api_view(["GET"])
@@ -4343,6 +4345,7 @@ def add_facilitator(request):
     fees_per_hour = request.data.get("fees_per_hour", "")
     fees_per_day = request.data.get("fees_per_day", "")
     topic = json.loads(request.data["topic"])
+    remarks = request.data.get("remarks", "")
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
     education_pic = request.data.get("education_pic", None)
@@ -4396,6 +4399,7 @@ def add_facilitator(request):
                 email=email,
                 phone=phone,
                 city=city,
+                remarks=remarks,
                 country=country,
                 phone_country_code=phone_country_code,
                 level=level,
@@ -4461,9 +4465,7 @@ def add_facilitator(request):
 
     except IntegrityError as e:
         print(str(e))
-        return Response(
-            {"error": "A facilitator user with this email already exists."}, status=400
-        )
+        return Response({"error": "Failed to add facilitator."}, status=400)
 
     except Exception as e:
         print(str(e))
@@ -8964,6 +8966,7 @@ def batch_competency_movement(request, batch_id, competency_id):
         {"action_item_movement": data, "action_item_counts": action_item_counts}
     )
 
+
 def find_conflicting_sessions():
     coach_conflicts = defaultdict(list)
     current_time = timezone.now()
@@ -9002,7 +9005,11 @@ def find_conflicting_sessions():
     result = []
     for session_id, conflicts in coach_conflicts.items():
         session_obj = SchedularSessions.objects.get(id=session_id)
-        session_coach_name = session_obj.availibility.coach.first_name + " " + session_obj.availibility.coach.last_name
+        session_coach_name = (
+            session_obj.availibility.coach.first_name
+            + " "
+            + session_obj.availibility.coach.last_name
+        )
         session_start_time = session_obj.availibility.start_time
         session_end_time = session_obj.availibility.end_time
         session_learner_name = session_obj.learner.name
@@ -9017,7 +9024,7 @@ def find_conflicting_sessions():
             "sessions": [
                 {
                     "learner_name": session_learner_name,
-                    "learner_email" : session_learner_email,
+                    "learner_email": session_learner_email,
                     "start_time": session_start_time,
                     "end_time": session_end_time,
                 }
@@ -9033,7 +9040,7 @@ def find_conflicting_sessions():
             project_name = conflict_obj.coaching_session.batch.project.name
             conflict_details = {
                 "learner_name": conflict_learner_name,
-                "learner_email" : conflict_learner_email,
+                "learner_email": conflict_learner_email,
                 "start_time": conflict_start_time,
                 "end_time": conflict_end_time,
             }
