@@ -12989,3 +12989,28 @@ def edit_curriculum(request, curriculum_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update curriculum."}, status=500)
+    
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def meeraq_chatbot(request):
+    try:
+        client = OpenAI()
+        prompt = request.data.get("prompt")
+        chat_entry = ChatHistory.objects.create(prompt=prompt)
+        last_three_chats = list(
+            ChatHistory.objects.order_by("-id")[:3].values_list("prompt", flat=True)
+        )
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system","content": "Read the contents of https://meeraq.com/ carefully. Mira will now act as a chatbot for queries related to meeraq only and dont answer any other queries than meeraq and all the answers should be crisp and in 2 liners only.-> Meeraq\n\nAbout Us:\nMeeraq is committed to transforming individuals and organizations by fostering 10X leaders who drive tangible impact across domains.\n\nPlatform:\nWe utilize technology to enhance our impact. Our proprietary platform delivers intelligent, automated, and seamless L&D experiences to companies and employees.\n\nOfferings:\n\nCoaching: Set up employees for success and unleash their potential.\nLearning: Craft impactful learning journeys to upskill and reskill your workforce.\nCertifications: Develop certified coaching and mentoring practitioners within your organization.\nAssessments: Take the first step towards organizational transformation.\n\nEvents:\nStay updated with our latest events and webinars aimed at enhancing leadership agility and fostering continuous learning.\n\nResources:\nExplore our blogs and case studies to gain insights into boosting employee success, democratizing coaching, maximizing training impact, and more.\n\nContact Us:\nReach out to us to set up a call with our experts and embark on a transformational L&D journey.".join(last_three_chats)},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        chat_entry.response = completion.choices[0].message.content.strip()
+        chat_entry.save()
+        return Response(completion.choices[0].message.content.strip(), status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
