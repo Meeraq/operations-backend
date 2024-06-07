@@ -510,6 +510,7 @@ class Project(models.Model):
     nudge_periodic_task = models.ForeignKey(
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
+    is_ngo_project = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]

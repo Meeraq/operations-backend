@@ -1829,6 +1829,7 @@ def create_project_cass(request):
                 calendar_invites=request.data["calendar_invites"],
                 finance=request.data["finance"],
                 is_project_structure=request.data["is_project_structure"],
+                is_ngo_project=request.data["is_ngo_project"],
                 total_credits=total_credits_in_minutes,
                 duration_of_each_session=duration_of_each_session,
                 request_expiry_time=request_expiry_time_in_minutes,
@@ -8514,6 +8515,9 @@ def edit_project_caas(request, project_id):
             )
             project.post_assessment = request.data.get(
                 "post_assessment", project.post_assessment
+            )
+            project.is_ngo_project = request.data.get(
+                "is_ngo_project", project.is_ngo_project
             )
             project.nudges = request.data.get("nudges", project.nudges)
 

@@ -381,6 +381,7 @@ def create_project_schedular(request):
             nudges=project_details["nudges"],
             pre_assessment=project_details["pre_assessment"],
             post_assessment=project_details["post_assessment"],
+            is_ngo_project=project_details["is_ngo_project"],
             is_finance_enabled=project_details["finance"],
             teams_enabled=project_details["teams_enabled"],
             project_type=project_details["project_type"],
@@ -5046,6 +5047,7 @@ def edit_schedular_project(request, project_id):
             project.nudges = project_details.get("nudges")
             project.pre_assessment = project_details.get("pre_assessment")
             project.post_assessment = project_details.get("post_assessment")
+            project.is_ngo_project = project_details.get("is_ngo_project")
             project.is_finance_enabled = project_details.get("finance")
             project.junior_pmo = junior_pmo
             project.teams_enabled = request.data.get("teams_enabled")
