@@ -614,4 +614,9 @@ urlpatterns = [
         views.meeraq_chatbot,
         name="meeraq_chatbot",
     ),
+    path(
+        "ctt-chatbot/",
+        views.ctt_chatbot,
+        name="ctt_chatbot",
+    ),
 ]

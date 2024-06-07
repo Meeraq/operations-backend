@@ -13014,3 +13014,27 @@ def meeraq_chatbot(request):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+    
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def ctt_chatbot(request):
+    try:
+        client = OpenAI()
+        prompt = request.data.get("prompt")
+        chat_entry = ChatHistory.objects.create(prompt=prompt)
+        last_three_chats = list(
+            ChatHistory.objects.order_by("-id")[:3].values_list("prompt", flat=True)
+        )
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system","content": "Read the contents of https://coach-to-transformation.com/ carefully. Mira will now act as a chatbot for queries related to Coach to tranformation only and dont answer any other queries than CTT (coach to transformation) and all the answers should be crisp and in 2 liners only.-> Certainly! Here's a more concise summary: Mentoring is essential for leadership development and employee growth. Coach-To-Transformation offers an Effective Mentoring Program focusing on structured skill development for managers. Benefits include trained mentors, emerging leader development, high engagement, talent retention, and positive culture. Creating a Coaching Culture: Coaching culture fosters trust, creativity, continuous learning, and engagement. Coach-To-Transformation provides interventions like internal coach training and manager empowerment. Benefits encompass leadership development, improved motivation, and enhanced communication. Developing Internal Coaches: Internal coaching involves training employees to become certified coaches. Benefits include democratizing coaching, fostering trust, improving productivity, and reducing costs. Coach-To-Transformation offers a comprehensive certification program with classroom training and mentor coaching. Lead(er) as a Coach Program: This program enables leaders to incorporate coaching into their leadership style. Benefits include understanding leadership dynamics, fostering communication, and becoming a curious leader. Coach-To-Transformation provides customizable modules covering active listening, powerful questioning, emotional intelligence, and situational leadership. Coach As A Service: Coach-To-Transformation offers qualified coaches tailored to organizational needs. Each coach undergoes rigorous selection and real-time project tracking. Services cover various coaching needs, including leadership, executive, performance, career, transition, and maternity coaching. Overall, embracing mentoring, coaching, and creating a coaching culture enables organizations to cultivate a workforce equipped for success. Coach-To-Transformation provides structured programs and tailored interventions to unleash talent potential and drive sustainable growth. please check the coach-to-tranformation.com and for other queries guide throught that.".join(last_three_chats)},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        chat_entry.response = completion.choices[0].message.content.strip()
+        chat_entry.save()
+        return Response(completion.choices[0].message.content.strip(), status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
