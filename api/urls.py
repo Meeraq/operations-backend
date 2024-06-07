@@ -599,15 +599,24 @@ urlpatterns = [
         views.get_prev_chat_data,
         name="get_prev_chat_data",
     ),
-       path(
+    path(
         "new-chat-created/<int:user_id>/",
         views.new_chat_created,
         name="new_chat_created/",
     ),
-        path(
+    path(
         "get-prev-chat-history/<int:user_id>/",
         views.get_prev_chat_history,
         name="get_prev_chat_data",
     ),
-    
+    path(
+        "meeraq-chatbot/",
+        views.meeraq_chatbot,
+        name="meeraq_chatbot",
+    ),
+    path(
+        "ctt-chatbot/",
+        views.ctt_chatbot,
+        name="ctt_chatbot",
+    ),
 ]
