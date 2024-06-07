@@ -86,7 +86,6 @@ from .serializers import (
     ChatHistorySerializer,
     CurriculumDepthOneSerializer,
     CurriculumSerializer,
-    
 )
 from zohoapi.serializers import (
     VendorDepthOneSerializer,
@@ -13057,12 +13056,54 @@ def assign_to_facilitators(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
 def get_all_facilitators_contracts(request):
     try:
-        
+
         facilitator_contract = FacilitatorContract.objects.all()
-        
-        serializer =FacilitatorContractSerializer(facilitator_contract,many=True)
+
+        serializer = FacilitatorContractSerializer(facilitator_contract, many=True)
 
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data."}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+def get_contract_of_facilitator(request, facilitator_id):
+    try:
+
+        facilitator_contract = FacilitatorContract.objects.filter(
+            facilitator=facilitator_id
+        ).first()
+
+        serializer = FacilitatorContractSerializer(facilitator_contract)
+
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+def accept_facilitator_contract(request, facilitator_contract_id):
+    try:
+        name_inputted = request.data.get("name_inputted")
+        if not name_inputted:
+            return Response({"error": "Name inputted is required."}, status=500)
+
+        facilitator_contract = get_object_or_404(
+            FacilitatorContract, id=facilitator_contract_id
+        )
+        name_present = f"{facilitator_contract.facilitator.first_name} {facilitator_contract.facilitator.last_name}"
+
+        if name_inputted.strip().lower() == name_present.strip().lower():
+            facilitator_contract.status = "approved"
+            facilitator_contract.response_date = timezone.now().date()
+            facilitator_contract.save()
+            return Response({"message": "Contract accepted successfully."}, status=200)
+        else:
+            return Response({"error": "Name does not match."}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to accept contract."}, status=500)
