@@ -312,7 +312,7 @@ class FacilitatorContract(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
 
     def __str__(self):
-        return f"{self.facilitator.first_name}'s Contract for {self.project.name if self.project else self.schedular_project.name}"
+        return f"{self.facilitator.first_name} {self.facilitator.last_name} Contract"
 
 class CoachPricing(models.Model):
     SESSION_CHOICES = [

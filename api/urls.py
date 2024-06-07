@@ -619,5 +619,14 @@ urlpatterns = [
         views.assign_to_facilitators,
         name="assign_to_facilitators",
     ),
-    
+       path(
+        "get-contract-of-facilitator/<int:facilitator_id>/",
+        views.get_contract_of_facilitator,
+        name="get_contract_of_facilitator",
+    ),
+        path(
+        "update-facilitator-contract/<int:facilitator_contract_id>/",
+        views.accept_facilitator_contract,
+        name="update-facilitator-contract",
+    ),
 ]

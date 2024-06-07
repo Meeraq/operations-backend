@@ -13013,7 +13013,7 @@ def assign_to_all_facilitators(request):
         for facilitator in unassigned_facilitator:
 
             new_facilitator_contract = FacilitatorContract.objects.create(
-                project_contract=contract, facilitator=facilitator
+                project_contract=contract, facilitator=facilitator,status = "pending"
             )
 
         return Response({"message": "Contract Assigned Successfully."}, status=201)
@@ -13043,7 +13043,7 @@ def assign_to_facilitators(request):
                 facilitator_contract.save()
             else:
                 new_facilitator_contract = FacilitatorContract.objects.create(
-                    project_contract=contract, facilitator=facilitator
+                    project_contract=contract, facilitator=facilitator,status = "pending"
                 )
 
         return Response({"message": "Contract Assigned Successfully."}, status=201)
@@ -13068,12 +13068,12 @@ def get_all_facilitators_contracts(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum","facilitator")])
 def get_contract_of_facilitator(request, facilitator_id):
     try:
-
+        print(facilitator_id,"8888888888888888888888888888888888888888888")
         facilitator_contract = FacilitatorContract.objects.filter(
-            facilitator=facilitator_id
+            facilitator__id=facilitator_id
         ).first()
 
         serializer = FacilitatorContractSerializer(facilitator_contract)
@@ -13085,7 +13085,7 @@ def get_contract_of_facilitator(request, facilitator_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum","facilitator")])
 def accept_facilitator_contract(request, facilitator_contract_id):
     try:
         name_inputted = request.data.get("name_inputted")
