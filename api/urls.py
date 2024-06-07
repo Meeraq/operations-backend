@@ -609,5 +609,15 @@ urlpatterns = [
         views.get_prev_chat_history,
         name="get_prev_chat_data",
     ),
+     path(
+        "assign-to-all-facilitators/",
+        views.assign_to_all_facilitators,
+        name="assign_to_all_facilitators",
+    ),
+    path(
+        "assign-to-facilitators/",
+        views.assign_to_facilitators,
+        name="assign_to_facilitators",
+    ),
     
 ]

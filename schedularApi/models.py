@@ -286,6 +286,34 @@ class CoachContract(models.Model):
         return f"{self.coach.first_name}'s Contract for {self.project.name if self.project else self.schedular_project.name}"
 
 
+class FacilitatorContract(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    project_contract = models.ForeignKey(
+        ProjectContract, on_delete=models.CASCADE, blank=True
+    )
+    name_inputed = models.CharField(max_length=100, blank=True)
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, blank=True, null=True
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.CASCADE, blank=True, null=True
+    )
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
+    )
+    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE)
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+
+    def __str__(self):
+        return f"{self.facilitator.first_name}'s Contract for {self.project.name if self.project else self.schedular_project.name}"
+
 class CoachPricing(models.Model):
     SESSION_CHOICES = [
         ("laser_coaching_session", "Laser Coaching Session"),

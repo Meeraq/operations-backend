@@ -209,6 +209,7 @@ from schedularApi.models import (
     CoachContract,
     ProjectContract,
     Benchmark,
+    FacilitatorContract,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
@@ -12989,3 +12990,64 @@ def edit_curriculum(request, curriculum_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update curriculum."}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+def assign_to_all_facilitators(request):
+    try:
+        contract_id = request.data.get("contract_id")
+        facilitators = Facilitator.objects.all()
+
+        unassigned_facilitator = []
+        for facilitator in facilitators:
+            facilitator_contract = FacilitatorContract.objects.filter(
+                facilitator=facilitator
+            ).first()
+            if facilitator_contract:
+                unassigned_facilitator.append(facilitator_contract)
+
+        contract = ProjectContract.objects.get(id=contract_id)
+
+        for facilitator in unassigned_facilitator:
+            
+
+            new_facilitator_contract = FacilitatorContract.objects.create(
+                project_contract=contract, facilitator=facilitator
+            )
+
+        return Response({"message": "Contract Assigned Successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to assign curriculum."}, status=500)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+def assign_to_facilitators(request):
+    try:
+        contract_id = request.data.get("contract_id")
+        selected_facilitator_ids = request.data.get("selectedFacilitators")
+        
+
+        unassigned_facilitator = []
+        contract = ProjectContract.objects.get(id=contract_id)
+        for facilitator_id in selected_facilitator_ids:
+            facilitator = Facilitator.objects.get(id = facilitator_id)
+
+            facilitator_contract = FacilitatorContract.objects.filter(
+                facilitator=facilitator
+            ).first()
+
+            if facilitator_contract:
+                facilitator_contract.project_contract = contract
+                facilitator_contract.save()
+            else:
+                new_facilitator_contract = FacilitatorContract.objects.create(
+                project_contract=contract, facilitator=facilitator
+            )
+            
+
+        return Response({"message": "Contract Assigned Successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to assign curriculum."}, status=500)
