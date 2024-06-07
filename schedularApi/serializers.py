@@ -19,7 +19,8 @@ from .models import (
     GmSheet,
     Offering,
     Benchmark,
-    Employee
+    Employee,
+    FacilitatorContract,
 )
 from api.models import Coach
 from api.models import Sales
@@ -51,6 +52,12 @@ class SessionItemSerializer(serializers.Serializer):
     )
 
 
+class FacilitatorContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorContract
+        fields = "__all__"
+        depth= 1
+        
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularBatch
