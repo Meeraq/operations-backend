@@ -9217,7 +9217,6 @@ def calculate_date_range(d1, d2, interval):
 def new_graph(request, batch_id, competency_id, behavior_id):
     # Get interval from query parameters
     interval = int(request.query_params.get("interval", 1))
-
     # Retrieve d1 from the first created action item
     first_created_action_item = (
         ActionItem.objects.filter(
@@ -9231,7 +9230,6 @@ def new_graph(request, batch_id, competency_id, behavior_id):
         if first_created_action_item
         else None
     )
-
     # Retrieve d2 from the last updated action item
     last_updated_action_item = (
         ActionItem.objects.filter(
@@ -9243,7 +9241,6 @@ def new_graph(request, batch_id, competency_id, behavior_id):
     d2 = (
         last_updated_action_item.updated_at.date() if last_updated_action_item else None
     )
-
     # Calculate date range based on interval
     date_range = calculate_date_range(d1, d2, interval)
     graph_data = [{"date": date.strftime("%d/%m/%y")} for date in date_range]
@@ -9268,7 +9265,7 @@ def new_graph(request, batch_id, competency_id, behavior_id):
                         update_date = datetime.strptime(
                             update["updated_at"], "%Y-%m-%d %H:%M:%S.%f+00:00"
                         ).date()
-                        if update_date <= date_range[outer_index + 1]:
+                        if update_date <= date_range[inner_index]:
                             latest_status = update["status"]
                         else:
                             break  # Break the loop if update date is after the mapped date
@@ -9278,11 +9275,21 @@ def new_graph(request, batch_id, competency_id, behavior_id):
                             - status_choices_dict[initial_status]
                         )
                         movements.append(movement)
-                average = sum(movements) / len(movements) if movements else 0
-                graph_data[inner_index][
-                    f"{filtered_action_items.count()} Actions created on "
-                    + (date_range[outer_index]).strftime("%d/%m/%y")
-                ] = average
+                average = (
+                    round((sum(movements) / len(movements)) / 4 * 100, 0)
+                    if movements
+                    else 0
+                )
+                if inner_index == outer_index:
+                    graph_data[inner_index][
+                        f"{filtered_action_items.count()} Actions created on "
+                        + (date_range[outer_index]).strftime("%d/%m/%y")
+                    ] = 0
+                if (inner_index + 1) <= last_index:
+                    graph_data[inner_index + 1][
+                        f"{filtered_action_items.count()} Actions created on "
+                        + (date_range[outer_index]).strftime("%d/%m/%y")
+                    ] = average
     return Response({"graph_data": graph_data})
 
 

@@ -1861,6 +1861,13 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
         print(str(e))
 
 
+
+session_type_value = {
+    "action_coaching_session": "Action Coaching Session",
+    "laser_coaching_session": "Coaching Session",
+    "mentoring_session": "Mentoring Session",
+}
+
 @shared_task
 def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
     try:
@@ -1959,21 +1966,16 @@ def coachee_booking_reminder_whatsapp_at_8am():
                         name = learner.name
                         phone = learner.phone
                         if len(result) != 0:
-                            session_name = (
-                                coaching_session.session_type.replace(
-                                    "_", " "
-                                ).capitalize()
-                                if not coaching_session.session_type
-                                == "laser_coaching_session"
-                                else "Coaching Session"
-                                + " "
-                                + str(coaching_session.coaching_session_number)
-                            )
                             project_name = coaching_session.batch.project.name
                             path_parts = coaching_session.booking_link.split("/")
                             booking_id = path_parts[-1]
                             expiry_date = coaching_session.expiry_date.strftime(
                                 "%d-%m-%Y"
+                            )
+                            session_name = (
+                                session_type_value[coaching_session.session_type]
+                                + " "
+                                + str(coaching_session.coaching_session_number)
                             )
                             send_whatsapp_message_template(
                                 phone,
@@ -2001,7 +2003,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
                                             "value": expiry_date,
                                         },
                                     ],
-                                    "template_name": "participant_slot_booking_reminder_for_skill_training_sessions",
+                                    "template_name": "session_booking_reminder_for_participants",
                                 },
                             )
                     except Exception as e:
@@ -2119,6 +2121,8 @@ def get_file_extension(url):
 #         nudge.save()
 
 
+
+
 @shared_task
 def celery_send_unbooked_coaching_session_mail(data):
     try:
@@ -2130,7 +2134,8 @@ def celery_send_unbooked_coaching_session_mail(data):
         date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
         formatted_date = date_obj.strftime("%d %B %Y")
         session_type = data.get("session_type", "")
-        
+        session_name = session_type_value[session_type]
+
         for participant in participants:
             try:
                 learner_name = Learner.objects.get(email=participant).name
@@ -2140,19 +2145,19 @@ def celery_send_unbooked_coaching_session_mail(data):
             send_mail_templates(
                 "seteventlink.html",
                 [participant],
-                f"{project_name} | Book Individual 1:1 coaching sessions",
+                f"{project_name} | Book Individual {session_name}",
                 {
                     "name": learner_name,
                     "project_name": project_name,
                     "event_link": booking_link,
                     "expiry_date": formatted_date,
+                    "session_name": session_name,
                 },
                 [],
             )
             sleep(5)
     except Exception as e:
         print(f"Error occurred while sending unbooked coaching email : {e}")
-
 
 
 @shared_task
@@ -2164,16 +2169,9 @@ def celery_send_unbooked_coaching_session_whatsapp_message(data):
         coaching_session = CoachingSession.objects.get(booking_link=booking_link)
         path_parts = booking_link.split("/")
         booking_id = path_parts[-1]
-        expiry_date = coaching_session.expiry_date.strftime(
-            "%d-%m-%Y"
-        )
+        expiry_date = coaching_session.expiry_date.strftime("%d-%m-%Y")
         session_name = (
-            coaching_session.session_type.replace(
-                "_", " "
-            ).capitalize()
-            if not coaching_session.session_type
-            == "laser_coaching_session"
-            else "Coaching Session"
+            session_type_value[coaching_session.session_type]
             + " "
             + str(coaching_session.coaching_session_number)
         )
@@ -2190,7 +2188,7 @@ def celery_send_unbooked_coaching_session_whatsapp_message(data):
                     "parameters": [
                         {
                             "name": "name",
-                            "value":learner.name,
+                            "value": learner.name,
                         },
                         {
                             "name": "session_name",
@@ -2209,7 +2207,7 @@ def celery_send_unbooked_coaching_session_whatsapp_message(data):
                             "value": expiry_date,
                         },
                     ],
-                    "template_name": "participant_slot_booking_reminder_for_skill_training_sessions",
+                    "template_name": "session_booking_reminder_for_participants",
                 },
             )
     except Exception as e:
