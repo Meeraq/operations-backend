@@ -209,14 +209,12 @@ from schedularApi.models import (
     CoachContract,
     ProjectContract,
     Benchmark,
-    FacilitatorContract,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
     CoachPricingSerializer,
     TaskSerializer,
     ExpenseSerializerDepthOne,
-    FacilitatorContractSerializer,
 )
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
@@ -5319,7 +5317,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
         session_duration = session_request.session_duration
         is_archive = session_request.is_archive
         invitees = session_request.invitees
-        
+
         res.append(
             {
                 "project_name": project_name,
@@ -5342,7 +5340,6 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "invitees": invitees,
                 "coach": coach,
                 "project": project,
-                "engagement" : session_request.engagement.id if session_request.engagement else None
             }
         )
     for schedular_session in schedular_sessions:
@@ -12992,7 +12989,7 @@ def edit_curriculum(request, curriculum_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update curriculum."}, status=500)
-
+    
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -13007,25 +13004,17 @@ def meeraq_chatbot(request):
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": "Read the contents of https://meeraq.com/ carefully. Mira will now act as a chatbot for queries related to meeraq only and dont answer any other queries than meeraq and all the answers should be crisp and in 2 liners only.-> Meeraq\n\nAbout Us:\nMeeraq is committed to transforming individuals and organizations by fostering 10X leaders who drive tangible impact across domains.\n\nPlatform:\nWe utilize technology to enhance our impact. Our proprietary platform delivers intelligent, automated, and seamless L&D experiences to companies and employees.\n\nOfferings:\n\nCoaching: Set up employees for success and unleash their potential.\nLearning: Craft impactful learning journeys to upskill and reskill your workforce.\nCertifications: Develop certified coaching and mentoring practitioners within your organization.\nAssessments: Take the first step towards organizational transformation.\n\nEvents:\nStay updated with our latest events and webinars aimed at enhancing leadership agility and fostering continuous learning.\n\nResources:\nExplore our blogs and case studies to gain insights into boosting employee success, democratizing coaching, maximizing training impact, and more.\n\nContact Us:\nReach out to us to set up a call with our experts and embark on a transformational L&D journey.".join(
-                        last_three_chats
-                    ),
-                },
+                {"role": "system","content": "Read the contents of https://meeraq.com/ carefully. Mira will now act as a chatbot for queries related to meeraq only and dont answer any other queries than meeraq and all the answers should be crisp and in 2 liners only.-> Meeraq\n\nAbout Us:\nMeeraq is committed to transforming individuals and organizations by fostering 10X leaders who drive tangible impact across domains.\n\nPlatform:\nWe utilize technology to enhance our impact. Our proprietary platform delivers intelligent, automated, and seamless L&D experiences to companies and employees.\n\nOfferings:\n\nCoaching: Set up employees for success and unleash their potential.\nLearning: Craft impactful learning journeys to upskill and reskill your workforce.\nCertifications: Develop certified coaching and mentoring practitioners within your organization.\nAssessments: Take the first step towards organizational transformation.\n\nEvents:\nStay updated with our latest events and webinars aimed at enhancing leadership agility and fostering continuous learning.\n\nResources:\nExplore our blogs and case studies to gain insights into boosting employee success, democratizing coaching, maximizing training impact, and more.\n\nContact Us:\nReach out to us to set up a call with our experts and embark on a transformational L&D journey.".join(last_three_chats)},
                 {"role": "user", "content": prompt},
             ],
         )
         chat_entry.response = completion.choices[0].message.content.strip()
         chat_entry.save()
-        return Response(
-            completion.choices[0].message.content.strip(), status=status.HTTP_200_OK
-        )
+        return Response(completion.choices[0].message.content.strip(), status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+    
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def ctt_chatbot(request):
@@ -13039,129 +13028,13 @@ def ctt_chatbot(request):
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": "Read the contents of https://coach-to-transformation.com/ carefully. Mira will now act as a chatbot for queries related to Coach to tranformation only and dont answer any other queries than CTT (coach to transformation) and all the answers should be crisp and in 2 liners only.-> Certainly! Here's a more concise summary: Mentoring is essential for leadership development and employee growth. Coach-To-Transformation offers an Effective Mentoring Program focusing on structured skill development for managers. Benefits include trained mentors, emerging leader development, high engagement, talent retention, and positive culture. Creating a Coaching Culture: Coaching culture fosters trust, creativity, continuous learning, and engagement. Coach-To-Transformation provides interventions like internal coach training and manager empowerment. Benefits encompass leadership development, improved motivation, and enhanced communication. Developing Internal Coaches: Internal coaching involves training employees to become certified coaches. Benefits include democratizing coaching, fostering trust, improving productivity, and reducing costs. Coach-To-Transformation offers a comprehensive certification program with classroom training and mentor coaching. Lead(er) as a Coach Program: This program enables leaders to incorporate coaching into their leadership style. Benefits include understanding leadership dynamics, fostering communication, and becoming a curious leader. Coach-To-Transformation provides customizable modules covering active listening, powerful questioning, emotional intelligence, and situational leadership. Coach As A Service: Coach-To-Transformation offers qualified coaches tailored to organizational needs. Each coach undergoes rigorous selection and real-time project tracking. Services cover various coaching needs, including leadership, executive, performance, career, transition, and maternity coaching. Overall, embracing mentoring, coaching, and creating a coaching culture enables organizations to cultivate a workforce equipped for success. Coach-To-Transformation provides structured programs and tailored interventions to unleash talent potential and drive sustainable growth. please check the coach-to-tranformation.com and for other queries guide throught that.".join(
-                        last_three_chats
-                    ),
-                },
+                {"role": "system","content": "Read the contents of https://coach-to-transformation.com/ carefully. Mira will now act as a chatbot for queries related to Coach to tranformation only and dont answer any other queries than CTT (coach to transformation) and all the answers should be crisp and in 2 liners only.-> Certainly! Here's a more concise summary: Mentoring is essential for leadership development and employee growth. Coach-To-Transformation offers an Effective Mentoring Program focusing on structured skill development for managers. Benefits include trained mentors, emerging leader development, high engagement, talent retention, and positive culture. Creating a Coaching Culture: Coaching culture fosters trust, creativity, continuous learning, and engagement. Coach-To-Transformation provides interventions like internal coach training and manager empowerment. Benefits encompass leadership development, improved motivation, and enhanced communication. Developing Internal Coaches: Internal coaching involves training employees to become certified coaches. Benefits include democratizing coaching, fostering trust, improving productivity, and reducing costs. Coach-To-Transformation offers a comprehensive certification program with classroom training and mentor coaching. Lead(er) as a Coach Program: This program enables leaders to incorporate coaching into their leadership style. Benefits include understanding leadership dynamics, fostering communication, and becoming a curious leader. Coach-To-Transformation provides customizable modules covering active listening, powerful questioning, emotional intelligence, and situational leadership. Coach As A Service: Coach-To-Transformation offers qualified coaches tailored to organizational needs. Each coach undergoes rigorous selection and real-time project tracking. Services cover various coaching needs, including leadership, executive, performance, career, transition, and maternity coaching. Overall, embracing mentoring, coaching, and creating a coaching culture enables organizations to cultivate a workforce equipped for success. Coach-To-Transformation provides structured programs and tailored interventions to unleash talent potential and drive sustainable growth. please check the coach-to-tranformation.com and for other queries guide throught that.".join(last_three_chats)},
                 {"role": "user", "content": prompt},
             ],
         )
         chat_entry.response = completion.choices[0].message.content.strip()
         chat_entry.save()
-        return Response(
-            completion.choices[0].message.content.strip(), status=status.HTTP_200_OK
-        )
+        return Response(completion.choices[0].message.content.strip(), status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
-def assign_to_all_facilitators(request):
-    try:
-        contract_id = request.data.get("contract_id")
-        facilitators = Facilitator.objects.all()
-        contract = ProjectContract.objects.get(id=contract_id)
-
-        for facilitator in facilitators:
-            facilitator_contract = FacilitatorContract.objects.filter(
-                facilitator=facilitator
-            ).first()
-            if facilitator_contract:
-                new_facilitator_contract = FacilitatorContract.objects.create(
-                    project_contract=contract, facilitator=facilitator, status="pending"
-                )
-
-        return Response({"message": "Contract Assigned Successfully."}, status=201)
-    except Exception as e:
-        print(str(e))
-        return Response({"error": "Failed to assign contract."}, status=500)
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
-def assign_to_facilitators(request):
-    try:
-        contract_id = request.data.get("contract_id")
-        selected_facilitator_ids = request.data.get("selectedFacilitators")
-
-        contract = ProjectContract.objects.get(id=contract_id)
-        for facilitator_id in selected_facilitator_ids:
-            facilitator = Facilitator.objects.get(id=facilitator_id)
-
-            facilitator_contract = FacilitatorContract.objects.filter(
-                facilitator=facilitator
-            ).first()
-
-            if facilitator_contract:
-                facilitator_contract.project_contract = contract
-                facilitator_contract.save()
-            else:
-                new_facilitator_contract = FacilitatorContract.objects.create(
-                    project_contract=contract, facilitator=facilitator, status="pending"
-                )
-
-        return Response({"message": "Contract Assigned Successfully."}, status=201)
-    except Exception as e:
-        print(str(e))
-        return Response({"error": "Failed to assign contract."}, status=500)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
-def get_all_facilitators_contracts(request):
-    try:
-
-        facilitator_contract = FacilitatorContract.objects.all()
-
-        serializer = FacilitatorContractSerializer(facilitator_contract, many=True)
-
-        return Response(serializer.data)
-    except Exception as e:
-        print(str(e))
-        return Response({"error": "Failed to get data."}, status=500)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
-def get_contract_of_facilitator(request, facilitator_id):
-    try:
-
-        facilitator_contract = FacilitatorContract.objects.filter(
-            facilitator__id=facilitator_id
-        ).first()
-
-        serializer = FacilitatorContractSerializer(facilitator_contract)
-
-        return Response(serializer.data)
-    except Exception as e:
-        print(str(e))
-        return Response({"error": "Failed to get data."}, status=500)
-
-
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
-def accept_facilitator_contract(request, facilitator_contract_id):
-    try:
-        name_inputted = request.data.get("name_inputted")
-        if not name_inputted:
-            return Response({"error": "Name inputted is required."}, status=500)
-
-        facilitator_contract = get_object_or_404(
-            FacilitatorContract, id=facilitator_contract_id
-        )
-        name_present = f"{facilitator_contract.facilitator.first_name} {facilitator_contract.facilitator.last_name}"
-
-        if name_inputted.strip().lower() == name_present.strip().lower():
-            facilitator_contract.status = "approved"
-            facilitator_contract.response_date = timezone.now().date()
-            facilitator_contract.save()
-            return Response({"message": "Contract accepted successfully."}, status=200)
-        else:
-            return Response({"error": "Name does not match."}, status=500)
-    except Exception as e:
-        print(str(e))
-        return Response({"error": "Failed to accept contract."}, status=500)
