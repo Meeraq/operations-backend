@@ -20,7 +20,8 @@ from .models import (
     GmSheet,
     Benchmark,
     Offering,
-    Assets
+    Assets,
+    FacilitatorContract,
 )
 
 # Register your models here.
@@ -46,3 +47,4 @@ admin.site.register(GmSheet)
 admin.site.register(Offering)
 admin.site.register(Benchmark)
 admin.site.register(Assets)
+admin.site.register(FacilitatorContract)
