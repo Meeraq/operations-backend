@@ -667,16 +667,19 @@ def get_all_nudge_resources(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
 @transaction.atomic
 def create_new_nudge_resources(request):
+    try:
 
-    serializer = NudgeResourcesSerializer(data=request.data)
+        serializer = NudgeResourcesSerializer(data=request.data)
 
-    if serializer.is_valid():
-        nudge_instance = serializer.save()
+        if serializer.is_valid():
+            nudge_instance = serializer.save()
 
-        serializer = NudgeResourcesSerializer(nudge_instance)
+            serializer = NudgeResourcesSerializer(nudge_instance)
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        print(str(e))
 
 
 @api_view(["PUT"])

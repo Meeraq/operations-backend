@@ -3740,8 +3740,9 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
 
 
 @shared_task
-def result_sending(assessment):
+def result_sending(assessment_id):
     try:
+        assessment = Assessment.objects.get(id=assessment_id)
         if assessment.assessment_type == "self":
             (
                 participant_released_results,

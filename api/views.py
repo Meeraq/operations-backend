@@ -226,7 +226,12 @@ from zohoapi.models import (
     PurchaseOrder,
     ZohoVendor,
 )
-from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
+from courses.models import (
+    CourseEnrollment,
+    CoachingSessionsFeedbackResponse,
+    Answer,
+    Course,
+)
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 import pdfkit
@@ -6828,11 +6833,24 @@ def get_current_session(request, user_type, room_id, user_id):
             nearest_session = seeq_sessions.first()
 
     if nearest_session:
+        course_id = None
+        if isinstance(nearest_session, SchedularSessions):
+            coaching_session = nearest_session.coaching_session
+            if coaching_session and coaching_session.batch:
+                course = Course.objects.filter(batch=coaching_session.batch).first()
+                if course:
+                    course_id = course.id
         session_details = {
             "session_id": nearest_session.id,
             "type": (
                 "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ"
             ),
+            "session_type": (
+                nearest_session.session_type
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.coaching_session.session_type
+            ),
+            "course_id": course_id,
             "start_time": (
                 nearest_session.confirmed_availability.start_time
                 if isinstance(nearest_session, SessionRequestCaas)
@@ -12818,8 +12836,6 @@ def get_user_feedback_repsonses(request):
         return Response(all_user_feedback_data_serializer.data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
-    
-    
 
 
 @api_view(["POST"])
@@ -12848,7 +12864,7 @@ def mira_assistant(request):
 
         response_data = {
             "response": completion.choices[0].message.content.strip(),
-            "current_time": timezone.now().isoformat()  # Convert current time to ISO format
+            "current_time": timezone.now().isoformat(),  # Convert current time to ISO format
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
