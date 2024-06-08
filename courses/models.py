@@ -295,8 +295,8 @@ class NudgeResources(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    caas_project_assigned = models.ManyToManyField(Project,blank=True, null=True)
-    skill_project_assigned =models.ManyToManyField(SchedularProject,blank=True, null=True)
+    caas_project_assigned = models.ManyToManyField(Project,blank=True)
+    skill_project_assigned =models.ManyToManyField(SchedularProject,blank=True)
     def __str__(self):
         return self.name
 
