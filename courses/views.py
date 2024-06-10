@@ -85,7 +85,16 @@ from .serializers import (
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas, Project
+from api.models import (
+    User,
+    Learner,
+    Profile,
+    Role,
+    Coach,
+    SessionRequestCaas,
+    Project,
+    Curriculum,
+)
 from api.serializers import ProjectSerializer
 from schedularApi.models import (
     LiveSession,
@@ -651,19 +660,10 @@ def create_new_nudge(request):
 @transaction.atomic
 def get_all_nudge_resources(request):
     nudges_resources = NudgeResources.objects.all().order_by("-created_at")
-    all_resources = []
-    for nudge_resource in nudges_resources:
-        project_names = set()
-        nudges = Nudge.objects.filter(nudge_resources=nudge_resource)
-        for nudge in nudges:
-            if nudge.batch:
-                project_names.add(nudge.batch.project.name)
-            elif nudge.caas_project:
-                project_names.add(nudge.caas_project.name)
 
-        serializer = NudgeResourcesSerializerDepthOne(nudge_resource)
-        all_resources.append({**serializer.data, "project_names": list(project_names)})
-    return Response(all_resources)
+    serializer = NudgeResourcesSerializerDepthOne(nudges_resources, many=True)
+
+    return Response(serializer.data)
 
 
 @api_view(["GET"])
@@ -676,13 +676,13 @@ def get_all_nudge_resources_by_project(request, project_or_batch_id, project_typ
             caas_project_assigned__id=project_or_batch_id
         ).order_by("-created_at")
     elif project_type == "skill_training":
-        batch = SchedularBatch.objects.get(id= project_or_batch_id)
+        batch = SchedularBatch.objects.get(id=project_or_batch_id)
         nudges_resources = NudgeResources.objects.filter(
             skill_project_assigned__id=batch.project.id
         ).order_by("-created_at")
 
-    serializer = NudgeResourcesSerializerDepthOne(nudges_resources,many=True)
-        
+    serializer = NudgeResourcesSerializerDepthOne(nudges_resources, many=True)
+
     return Response(serializer.data)
 
 
