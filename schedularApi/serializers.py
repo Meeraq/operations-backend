@@ -57,7 +57,13 @@ class FacilitatorContractSerializer(serializers.ModelSerializer):
         model = FacilitatorContract
         fields = "__all__"
         depth= 1
+
+class FacilitatorContractSerializerNoDepth(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorContract
+        fields = "__all__"
         
+
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularBatch

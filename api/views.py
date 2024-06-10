@@ -5319,7 +5319,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
         session_duration = session_request.session_duration
         is_archive = session_request.is_archive
         invitees = session_request.invitees
-        
+
         res.append(
             {
                 "project_name": project_name,
@@ -5342,7 +5342,11 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "invitees": invitees,
                 "coach": coach,
                 "project": project,
-                "engagement" : session_request.engagement.id if session_request.engagement else None
+                "engagement": (
+                    session_request.engagement.id
+                    if session_request.engagement
+                    else None
+                ),
             }
         )
     for schedular_session in schedular_sessions:
@@ -10471,7 +10475,7 @@ class DownloadCoachContract(APIView):
     def get(self, request, coach_contract_id, format=None):
         try:
             coach_contract = CoachContract.objects.get(id=coach_contract_id)
-            coach_contract.project_contract.project.project_structure
+
             coach_status = CoachStatus.objects.get(
                 coach=coach_contract.coach,
                 project=coach_contract.project_contract.project,
@@ -10510,6 +10514,45 @@ class DownloadCoachContract(APIView):
                     "total_sessions": total_sessions,
                     "total_duration": total_duration,
                     "total_coach_fees": total_coach_fees,
+                },
+            )
+            pdf = pdfkit.from_string(
+                html_content,
+                False,
+                configuration=pdfkit_config,
+            )
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = f'attachment; filename={f"Contract.pdf"}'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download Contract."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownloadFacilitatorContract(APIView):
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+
+    def get(self, request, facilitator_contract_id, format=None):
+        try:
+            facilitator_contract = FacilitatorContract.objects.get(
+                id=facilitator_contract_id
+            )
+
+            html_content = render_to_string(
+                "contract/facilitator_contract_template.html",
+                {
+                    "name": facilitator_contract.facilitator.first_name
+                    + " "
+                    + facilitator_contract.facilitator.last_name,
+                    "content": facilitator_contract.project_contract.content,
+                    "name_inputed": facilitator_contract.name_inputed.capitalize(),
+                    "signed_date": facilitator_contract.response_date.strftime(
+                        "%d-%m-%Y"
+                    ),
                 },
             )
             pdf = pdfkit.from_string(
@@ -13070,7 +13113,7 @@ def assign_to_all_facilitators(request):
             facilitator_contract = FacilitatorContract.objects.filter(
                 facilitator=facilitator
             ).first()
-            if facilitator_contract:
+            if not facilitator_contract:
                 new_facilitator_contract = FacilitatorContract.objects.create(
                     project_contract=contract, facilitator=facilitator, status="pending"
                 )
@@ -13142,6 +13185,21 @@ def get_contract_of_facilitator(request, facilitator_id):
         return Response({"error": "Failed to get data."}, status=500)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
+def get_contract_of_all_facilitator(request):
+    try:
+
+        facilitator_contract = FacilitatorContract.objects.all()
+
+        serializer = FacilitatorContractSerializer(facilitator_contract, many=True)
+
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
 def accept_facilitator_contract(request, facilitator_contract_id):
@@ -13158,6 +13216,7 @@ def accept_facilitator_contract(request, facilitator_contract_id):
         if name_inputted.strip().lower() == name_present.strip().lower():
             facilitator_contract.status = "approved"
             facilitator_contract.response_date = timezone.now().date()
+            facilitator_contract.name_inputed = name_present
             facilitator_contract.save()
             return Response({"message": "Contract accepted successfully."}, status=200)
         else:
