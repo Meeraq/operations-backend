@@ -2778,54 +2778,75 @@ def validate_otp(request):
         raise AuthenticationFailed("Invalid OTP")
 
     user = otp_obj.user
-    # token, created = Token.objects.get_or_create(user=learner.user.user)
     # Delete the OTP object after it has been validated
     user_email = request.data["email"].strip().lower()
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
     user_data = get_user_data(user)
+
     if user_data:
-        coach = Coach.objects.filter(email=user_email).first()
-        facilitator = Facilitator.objects.filter(email=user_email).first()
-        if coach:
-            coach.is_otp_verified = True
-            coach.save()
-        if facilitator:
-            facilitator.is_otp_verified = True
-            facilitator.save()
-
-        login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(
-            user=user, timestamp=login_timestamp, platform=platform
-        )
-        user_token = None
         try:
-            user_token = UserToken.objects.get(user_profile__user__username=user_email)
-            if user_token.account_type == "google":
-                refresh_google_access_token(user_token)
-            else:
-                refresh_microsoft_access_token(user_token)
-        except ObjectDoesNotExist:
-            print("Does not exist")
+            coach = Coach.objects.filter(email=user_email).first()
+            facilitator = Facilitator.objects.filter(email=user_email).first()
 
-        response = Response(
-            {
-                "detail": "Successfully logged in.",
-                "user": {**user_data, "last_login": last_login},
-            }
-        )
-        response["X-CSRFToken"] = get_token(request)
-        return response
+            if coach and not coach.is_otp_verified:
+                pmo_user = User.objects.filter(profile__roles__name="pmo").first()
+                pmo = Pmo.objects.get(email=pmo_user.username)
+
+                create_notification(
+                    pmo_user,
+                    f"/registeredcoach",
+                    f"{coach.first_name} {coach.last_name} has registered as a coach. Please go through his Profile.",
+                )
+                send_mail_templates(
+                    "pmo_emails/coach_register.html",
+                    [pmo_user.username],
+                    f"{coach.first_name} {coach.last_name} has Registered as a Coach",
+                    {
+                        "name": pmo.name,
+                        "coachName": f"{coach.first_name} {coach.last_name}",
+                    },
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
+                )
+
+            if coach:
+                coach.is_otp_verified = True
+                coach.save()
+            if facilitator:
+                facilitator.is_otp_verified = True
+                facilitator.save()
+
+            login_timestamp = timezone.now()
+            UserLoginActivity.objects.create(
+                user=user, timestamp=login_timestamp, platform=platform
+            )
+            user_token = None
+            try:
+                user_token = UserToken.objects.get(user_profile__user__username=user_email)
+                if user_token.account_type == "google":
+                    refresh_google_access_token(user_token)
+                else:
+                    refresh_microsoft_access_token(user_token)
+            except ObjectDoesNotExist:
+                print("User token does not exist")
+
+            response = Response(
+                {
+                    "detail": "Successfully logged in.",
+                    "user": {**user_data, "last_login": last_login},
+                }
+            )
+            response["X-CSRFToken"] = get_token(request)
+            return response
+        except Exception as e:
+            print(f"Error while sending notification and email: {e}")
+            logout(request)
+            return Response({"error": "Invalid user type"}, status=400)
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
-
-    # learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email,'last_login': learner.user.user.last_login ,'token': token.key}
-    # updateLastLogin(learner.email)
-    # return Response({ 'learner': learner_data},status=200)
-
-
+    
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_organisation(request):
@@ -8102,21 +8123,21 @@ class AddRegisteredCoach(APIView):
                 create_notification(coach.user.user, path, message)
                 pmo_user = User.objects.filter(profile__roles__name="pmo").first()
                 pmo = Pmo.objects.get(email=pmo_user.username)
-                create_notification(
-                    pmo_user,
-                    f"/registeredcoach",
-                    f"{coach.first_name} {coach.last_name} has registered as a coach. Please go through his Profile.",
-                )
-                send_mail_templates(
-                    "pmo_emails/coach_register.html",
-                    [pmo_user.username],
-                    f"{coach.first_name} {coach.last_name} has Registered as a Coach",
-                    {
-                        "name": pmo.name,
-                        "coachName": f"{coach.first_name} {coach.last_name} ",
-                    },
-                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
-                )
+                # create_notification(
+                #     pmo_user,
+                #     f"/registeredcoach",
+                #     f"{coach.first_name} {coach.last_name} has registered as a coach. Please go through his Profile.",
+                # )
+                # send_mail_templates(
+                #     "pmo_emails/coach_register.html",
+                #     [pmo_user.username],
+                #     f"{coach.first_name} {coach.last_name} has Registered as a Coach",
+                #     {
+                #         "name": pmo.name,
+                #         "coachName": f"{coach.first_name} {coach.last_name} ",
+                #     },
+                #     json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
+                # )
                 # Send profile completion tips to the coach
                 send_mail_templates(
                     "coach_templates/profile_creation_tips.html",
