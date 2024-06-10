@@ -5,13 +5,14 @@ from schedularApi.models import (
     LiveSession,
     CoachingSession,
     SchedularSessions,
+    SchedularProject
 )
 import os
 from django.core.exceptions import ValidationError
 from django_celery_beat.models import PeriodicTask
 import uuid
 from assessmentApi.models import Assessment as AssessmentModal, Competency, Behavior
-from api.models import SessionRequestCaas
+from api.models import SessionRequestCaas, Project, Curriculum
 
 # Create your models here.
 
@@ -276,14 +277,44 @@ class ThinkificLessonCompleted(models.Model):
         return f"{self.student_name} completed {self.lesson_name} in {self.course_name}"
 
 
-class Nudge(models.Model):
+class NudgeResources(models.Model):
+    STATUS_CHOICES = [
+        ("Draft", "Draft"),
+        ("Open", "Open"),
+    ]
     name = models.CharField(max_length=255)
     content = models.TextField()
     file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    competency = models.ManyToManyField(Competency)
+    behavior = models.ManyToManyField(Behavior)
+    curriculum = models.ForeignKey(
+        Curriculum, on_delete=models.CASCADE, blank=True, null=True
+    )
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, blank=True, null=True,default="Draft"  
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    caas_project_assigned = models.ManyToManyField(Project,blank=True)
+    skill_project_assigned =models.ManyToManyField(SchedularProject,blank=True)
+    def __str__(self):
+        return self.name
+
+
+class Nudge(models.Model):
+    name = models.CharField(max_length=255, blank=True, null=True)
+    content = models.TextField(blank=True, null=True)
+    file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    nudge_resources = models.ForeignKey(
+        NudgeResources, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
     order = models.IntegerField()
     # course = models.ForeignKey(Course, on_delete=models.CASCADE)
     batch = models.ForeignKey(
         SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
+    caas_project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
     trigger_date = models.DateField(default=None, blank=True, null=True)
     learner_ids = models.JSONField(
@@ -355,4 +386,3 @@ class CttFeedbackResponse(models.Model):
     answers = models.ManyToManyField(Answer)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-

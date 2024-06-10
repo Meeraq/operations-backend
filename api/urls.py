@@ -28,6 +28,7 @@ from .views import (
     GetCoachContractFromProject,
     AddRegisteredFacilitator,
     UpdateUserRoles,
+    DownloadFacilitatorContract,
 )
 
 urlpatterns = [
@@ -387,6 +388,11 @@ urlpatterns = [
         "download-coach-contract/<int:coach_contract_id>/",
         DownloadCoachContract.as_view(),
     ),
+     path(
+        "download-facilitator-contract/<int:facilitator_contract_id>/",
+        DownloadFacilitatorContract.as_view(),
+    ),
+    
     path(
         "session-data/",
         SessionData.as_view(),
@@ -546,6 +552,9 @@ urlpatterns = [
     path("leaders/", views.get_leaders),
     path("leaders/create/", views.add_leader),
     path("leaders/edit/<int:leader_id>/", views.edit_leader),
+    path("curriculum/", views.get_curriculums),
+    path("curriculum/create/", views.add_curriculum),
+    path("curriculum/edit/<int:curriculum_id>/", views.edit_curriculum),
     path(
         "create-new-engagement/",
         views.create_engagement_of_learner,
@@ -588,4 +597,57 @@ urlpatterns = [
     path("coach-share-links/", views.get_coach_shared_links),
     path("coach-profile-share/edit/<int:pk>/", views.update_coach_profile_share),
     path("rewrite/", views.rewrite),
+    path("user-feedback-response/", views.user_feedback_response),
+    path("get-user-feedback-responses/", views.get_user_feedback_repsonses),
+    path("mira-assistant/", views.mira_assistant, name="mira_assistant"),
+    path(
+        "get-prev-chat-data/<int:user_id>/",
+        views.get_prev_chat_data,
+        name="get_prev_chat_data",
+    ),
+    path(
+        "new-chat-created/<int:user_id>/",
+        views.new_chat_created,
+        name="new_chat_created/",
+    ),
+    path(
+        "get-prev-chat-history/<int:user_id>/",
+        views.get_prev_chat_history,
+        name="get_prev_chat_data",
+    ),
+    path(
+        "meeraq-chatbot/",
+        views.meeraq_chatbot,
+        name="meeraq_chatbot",
+    ),
+    path(
+        "ctt-chatbot/",
+        views.ctt_chatbot,
+        name="ctt_chatbot",
+    ),
+     path(
+        "assign-to-all-facilitators/",
+        views.assign_to_all_facilitators,
+        name="assign_to_all_facilitators",
+    ),
+    path(
+        "assign-to-facilitators/",
+        views.assign_to_facilitators,
+        name="assign_to_facilitators",
+    ),
+       path(
+        "get-contract-of-facilitator/<int:facilitator_id>/",
+        views.get_contract_of_facilitator,
+        name="get_contract_of_facilitator",
+    ),
+        path(
+        "update-facilitator-contract/<int:facilitator_contract_id>/",
+        views.accept_facilitator_contract,
+        name="update-facilitator-contract",
+    ),
+        path(
+        "get-contract-of-all-facilitator/",
+        views.get_contract_of_all_facilitator,
+        name="get_contract_of_all_facilitator",
+    ),
 ]

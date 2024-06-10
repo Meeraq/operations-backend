@@ -8,7 +8,7 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
-from api.models import Coach, User, UserToken, SessionRequestCaas, Learner
+from api.models import Coach, User, UserToken, SessionRequestCaas, Learner, Project
 from schedularApi.models import (
     CoachingSession,
     SchedularSessions,
@@ -44,6 +44,8 @@ from assessmentApi.models import (
     ObserverUniqueId,
     ObserverResponse,
     ParticipantObserverType,
+    Competency,
+    ParticipantReleasedResults,
 )
 from courses.models import (
     Course,
@@ -72,10 +74,389 @@ from zohoapi.views import (
 from zohoapi.tasks import get_access_token, organization_id, base_url
 from courses.serializers import NudgeSerializer
 from api.models import Role, Profile
+import matplotlib.pyplot as plt
 
 env = environ.Env()
 environ.Env.read_env()
 import random
+import io
+from io import BytesIO
+import base64
+import numpy as np
+
+
+def swap_positions(length):
+    numbers = list(range(1, length + 1))
+
+    midpoint = length // 2
+
+    for i in range(midpoint):
+        numbers[i], numbers[-(i + 1)] = numbers[-(i + 1)], numbers[i]
+
+    swapped_dict = {
+        orig: swapped for orig, swapped in zip(range(1, length + 1), numbers)
+    }
+    return swapped_dict
+
+
+def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp):
+    comp_labels = list(competency_percentage.keys())
+    percentage_values = list(competency_percentage.values())
+    colors1 = ["#eb0081", "#d1cdcd"]
+    colors2 = ["#b91689", "#d1cdcd"]
+    colors3 = ["#7a3191", "#d1cdcd"]
+    colors4 = ["#374e9c", "#d1cdcd"]
+
+    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
+    ax = fig.add_subplot(111)
+
+    bottom = np.zeros(len(comp_labels))
+    bar_positions = np.arange(len(comp_labels))
+    for i in range(len(comp_labels)):
+        color_index = i % 4  # Use modulo to repeat colors after every four bars
+
+        if color_index == 0:
+            color = colors1
+        elif color_index == 1:
+            color = colors2
+        elif color_index == 2:
+            color = colors3
+        else:
+            color = colors4
+
+        ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
+
+    for index, value in enumerate(percentage_values):
+        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        ax.text(
+            value,
+            bar_positions[index],
+            f"{value}%",
+            ha="left",
+            va="center",
+            color="black",
+        )
+    ax.set_yticks(bar_positions)
+    ax.set_yticklabels(
+        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
+        fontweight="bold",
+        fontsize=14,
+    )
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
+    plt.xlim(0, 100)
+    plt.xlabel("Percentage")
+    plt.tight_layout()
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
+
+
+def generate_graph_for_pre_post_assessment(
+    pre_competency_percentage, competency_percentage, total_for_each_comp
+):
+    comp_labels = list(competency_percentage.keys())
+    pre_percentage_values = list(pre_competency_percentage.values())
+    post_percentage_values = list(competency_percentage.values())
+
+    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
+    ax = fig.add_subplot(111)
+
+    width = 0.4  # Width of each bar
+    bar_positions = np.arange(len(comp_labels))
+
+    # Plot pre-assessment values
+    pre_bars = ax.barh(
+        bar_positions - width / 2,
+        pre_percentage_values,
+        height=width,
+        label="Pre-Assessment",
+        color="#eb0081",
+    )
+
+    # Plot post-assessment values
+    post_bars = ax.barh(
+        bar_positions + width / 2,
+        post_percentage_values,
+        height=width,
+        label="Post-Assessment",
+        color="#374e9c",
+    )
+
+    ax.set_yticks(bar_positions)
+    ax.set_yticklabels(comp_labels)
+    ax.legend()
+    ax.set_yticklabels(
+        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
+        fontweight="bold",
+    )
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
+    plt.xlabel("Percentage")
+    plt.xlim(0, 100)
+    plt.tight_layout()
+
+    # Add numbers on top of the pre-assessment bars
+    for index, value in enumerate(pre_percentage_values):
+        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        ax.text(
+            value,
+            bar_positions[index] - width / 2,
+            f"{value}%",
+            ha="left",
+            va="center",
+            color="black",
+        )
+
+    # Add numbers on top of the post-assessment bars
+    for index, value in enumerate(post_percentage_values):
+        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        ax.text(
+            value,
+            bar_positions[index] + width / 2,
+            f"{value}%",
+            ha="left",
+            va="center",
+            color="black",
+        )
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
+
+
+def generate_graph_for_participant(
+    participant, assessment_id, assessment, project_wise=False
+):
+    participant_response = ParticipantResponse.objects.filter(
+        participant__id=participant.id, assessment__id=assessment_id
+    ).first()
+
+    if participant_response:
+        total_for_each_comp = {}
+        compentency_with_description = []
+
+        for competency in assessment.questionnaire.questions.values(
+            "competency"
+        ).distinct():
+            competency_id = competency["competency"]
+
+            competency_name_for_object = Competency.objects.get(id=competency_id).name
+            competency_description_for_object = Competency.objects.get(
+                id=competency_id
+            ).description
+            competency_object = {
+                "competency_name": competency_name_for_object,
+                "competency_description": competency_description_for_object,
+            }
+            compentency_with_description.append(competency_object)
+
+        for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
+            if question.competency.name not in total_for_each_comp:
+                total_for_each_comp[question.competency.name] = 1
+            else:
+                total_for_each_comp[question.competency.name] += 1
+
+        competency_object = {}
+        for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
+            if question.competency.name not in competency_object:
+                competency_object[question.competency.name] = 0
+
+            participant_response_value = participant_response.participant_response.get(
+                str(question.id)
+            )
+
+            if question.response_type == "correct_answer":
+                correct_answer = (
+                    assessment.questionnaire.questions.filter(id=question.id)
+                    .first()
+                    .correct_answer
+                )
+
+                if str(participant_response_value) in correct_answer:
+                    competency_object[question.competency.name] = (
+                        competency_object[question.competency.name] + 1
+                    )
+
+            elif question.response_type == "rating_type":
+                if participant_response_value:
+                    label_count = sum(
+                        1 for key in question.label.keys() if question.label[key]
+                    )
+                    if not question.reverse_question:
+
+                        swap_dict = swap_positions(label_count)
+
+                        competency_object[question.competency.name] = competency_object[
+                            question.competency.name
+                        ] + (swap_dict[participant_response_value] / label_count)
+                    else:
+
+                        competency_object[question.competency.name] = competency_object[
+                            question.competency.name
+                        ] + (participant_response_value / label_count)
+
+        competency_percentage = {}
+        for comp in total_for_each_comp:
+            competency_percentage[comp] = round(
+                (competency_object[comp] / total_for_each_comp[comp]) * 100
+            )
+
+        if project_wise:
+            return competency_percentage
+
+        encoded_image = generate_graph_for_pre_assessment(
+            competency_percentage, total_for_each_comp
+        )
+
+        return encoded_image, compentency_with_description
+
+    if project_wise:
+        return None
+
+    return None, None
+
+
+def generate_graph_for_participant_for_post_assessment(
+    participant, assessment_id, assessment, project_wise=False
+):
+    participant_response = ParticipantResponse.objects.filter(
+        participant__id=participant.id, assessment__id=assessment_id
+    ).first()
+
+    pre_assessment_participant_response = ParticipantResponse.objects.filter(
+        participant__id=participant.id, assessment__id=assessment.pre_assessment.id
+    ).first()
+
+    if participant_response and pre_assessment_participant_response:
+        total_for_each_comp = {}
+        compentency_with_description = []
+
+        for competency in assessment.questionnaire.questions.values(
+            "competency"
+        ).distinct():
+            competency_id = competency["competency"]
+
+            competency_name_for_object = Competency.objects.get(id=competency_id).name
+            competency_description_for_object = Competency.objects.get(
+                id=competency_id
+            ).description
+            competency_object = {
+                "competency_name": competency_name_for_object,
+                "competency_description": competency_description_for_object,
+            }
+            compentency_with_description.append(competency_object)
+
+        for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
+            if question.competency.name not in total_for_each_comp:
+                total_for_each_comp[question.competency.name] = 1
+            else:
+                total_for_each_comp[question.competency.name] += 1
+
+        competency_object = {}
+        pre_competency_object = {}
+        for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
+            if question.competency.name not in competency_object:
+                competency_object[question.competency.name] = 0
+            if question.competency.name not in pre_competency_object:
+                pre_competency_object[question.competency.name] = 0
+
+            participant_response_value = participant_response.participant_response.get(
+                str(question.id)
+            )
+            pre_assessment_participant_response_value = (
+                pre_assessment_participant_response.participant_response.get(
+                    str(question.id)
+                )
+            )
+
+            if question.response_type == "correct_answer":
+
+                correct_answer = (
+                    assessment.questionnaire.questions.filter(id=question.id)
+                    .first()
+                    .correct_answer
+                )
+
+                if str(pre_assessment_participant_response_value) in correct_answer:
+
+                    pre_competency_object[question.competency.name] = (
+                        pre_competency_object[question.competency.name] + 1
+                    )
+
+                if str(participant_response_value) in correct_answer:
+                    competency_object[question.competency.name] = (
+                        competency_object[question.competency.name] + 1
+                    )
+
+            elif question.response_type == "rating_type":
+                if participant_response_value:
+                    label_count = sum(
+                        1 for key in question.label.keys() if question.label[key]
+                    )
+                    swap_dict = swap_positions(label_count)
+                    if pre_assessment_participant_response_value:
+                        if not question.reverse_question:
+
+                            pre_competency_object[
+                                question.competency.name
+                            ] = pre_competency_object[question.competency.name] + (
+                                swap_dict[pre_assessment_participant_response_value]
+                                / label_count
+                            )
+                        else:
+                            pre_competency_object[
+                                question.competency.name
+                            ] = pre_competency_object[question.competency.name] + (
+                                pre_assessment_participant_response_value / label_count
+                            )
+
+                    if participant_response_value:
+                        if not question.reverse_question:
+                            competency_object[question.competency.name] = (
+                                competency_object[question.competency.name]
+                                + (swap_dict[participant_response_value] / label_count)
+                            )
+                        else:
+                            competency_object[question.competency.name] = (
+                                competency_object[question.competency.name]
+                                + (participant_response_value / label_count)
+                            )
+
+        competency_percentage = {}
+        pre_competency_percentage = {}
+        for comp in total_for_each_comp:
+            competency_percentage[comp] = round(
+                (competency_object[comp] / total_for_each_comp[comp]) * 100
+            )
+            pre_competency_percentage[comp] = round(
+                (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
+            )
+
+        if project_wise:
+            return pre_competency_percentage, competency_percentage
+        encoded_image = generate_graph_for_pre_post_assessment(
+            pre_competency_percentage, competency_percentage, total_for_each_comp
+        )
+
+        return encoded_image, compentency_with_description
+
+    return None, None
 
 
 def create_learner(learner_name, learner_email, learner_phone=None):
@@ -1480,6 +1861,13 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
         print(str(e))
 
 
+
+session_type_value = {
+    "action_coaching_session": "Action Coaching Session",
+    "laser_coaching_session": "Coaching Session",
+    "mentoring_session": "Mentoring Session",
+}
+
 @shared_task
 def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
     try:
@@ -1578,21 +1966,16 @@ def coachee_booking_reminder_whatsapp_at_8am():
                         name = learner.name
                         phone = learner.phone
                         if len(result) != 0:
-                            session_name = (
-                                coaching_session.session_type.replace(
-                                    "_", " "
-                                ).capitalize()
-                                if not coaching_session.session_type
-                                == "laser_coaching_session"
-                                else "Coaching Session"
-                                + " "
-                                + str(coaching_session.coaching_session_number)
-                            )
                             project_name = coaching_session.batch.project.name
                             path_parts = coaching_session.booking_link.split("/")
                             booking_id = path_parts[-1]
                             expiry_date = coaching_session.expiry_date.strftime(
                                 "%d-%m-%Y"
+                            )
+                            session_name = (
+                                session_type_value[coaching_session.session_type]
+                                + " "
+                                + str(coaching_session.coaching_session_number)
                             )
                             send_whatsapp_message_template(
                                 phone,
@@ -1620,7 +2003,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
                                             "value": expiry_date,
                                         },
                                     ],
-                                    "template_name": "participant_slot_booking_reminder_for_skill_training_sessions",
+                                    "template_name": "session_booking_reminder_for_participants",
                                 },
                             )
                     except Exception as e:
@@ -1666,16 +2049,22 @@ def coach_has_to_give_slots_availability_reminder():
 
 
 @shared_task
-def schedule_nudges(batch_id):
-    batch = SchedularBatch.objects.get(id=batch_id)
-    nudges = Nudge.objects.filter(batch__id=batch_id).order_by("order")
-    nudge_scheduled_for = batch.nudge_start_date
+def schedule_nudges(instance_id, instance_type=None):
+    if instance_type == "project":
+        project = Project.objects.get(id=instance_id)
+        nudge_scheduled_for = project.nudge_start_date
+        nudge_frequency = project.nudge_frequency
+        nudges = Nudge.objects.filter(caas_project=project).order_by("order")
+    elif instance_type == "batch" or not instance_type:
+        batch = SchedularBatch.objects.get(id=instance_id)
+        nudge_scheduled_for = batch.nudge_start_date
+        nudge_frequency = batch.nudge_frequency
+        nudges = Nudge.objects.filter(batch=batch).order_by("order")
+
     for nudge in nudges:
         nudge.trigger_date = nudge_scheduled_for
         nudge.save()
-        nudge_scheduled_for = nudge_scheduled_for + timedelta(
-            int(batch.nudge_frequency)
-        )
+        nudge_scheduled_for = nudge_scheduled_for + timedelta(int(nudge_frequency))
 
 
 def get_file_content(file_url):
@@ -1732,6 +2121,8 @@ def get_file_extension(url):
 #         nudge.save()
 
 
+
+
 @shared_task
 def celery_send_unbooked_coaching_session_mail(data):
     try:
@@ -1743,6 +2134,8 @@ def celery_send_unbooked_coaching_session_mail(data):
         date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
         formatted_date = date_obj.strftime("%d %B %Y")
         session_type = data.get("session_type", "")
+        session_name = session_type_value[session_type]
+
         for participant in participants:
             try:
                 learner_name = Learner.objects.get(email=participant).name
@@ -1752,22 +2145,71 @@ def celery_send_unbooked_coaching_session_mail(data):
             send_mail_templates(
                 "seteventlink.html",
                 [participant],
-                # "Meeraq -Book Laser Coaching Session"
-                # if session_type == "laser_coaching_session"
-                # else "Meeraq - Book Mentoring Session",
-                f"{project_name} | Book Individual 1:1 coaching sessions",
+                f"{project_name} | Book Individual {session_name}",
                 {
                     "name": learner_name,
                     "project_name": project_name,
                     "event_link": booking_link,
                     "expiry_date": formatted_date,
-                    # "session_type": "mentoring"
-                    # if session_type == "mentoring_session"
-                    # else "laser coaching",
+                    "session_name": session_name,
                 },
                 [],
             )
             sleep(5)
+    except Exception as e:
+        print(f"Error occurred while sending unbooked coaching email : {e}")
+
+
+@shared_task
+def celery_send_unbooked_coaching_session_whatsapp_message(data):
+    try:
+        project_name = data.get("project_name", "")
+        participants = data.get("participants", [])
+        booking_link = data.get("bookingLink", "")
+        coaching_session = CoachingSession.objects.get(booking_link=booking_link)
+        path_parts = booking_link.split("/")
+        booking_id = path_parts[-1]
+        expiry_date = coaching_session.expiry_date.strftime("%d-%m-%Y")
+        session_name = (
+            session_type_value[coaching_session.session_type]
+            + " "
+            + str(coaching_session.coaching_session_number)
+        )
+        for participant in participants:
+            try:
+                learner = Learner.objects.get(email=participant)
+            except:
+                continue
+
+            send_whatsapp_message_template(
+                learner.phone,
+                {
+                    "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": learner.name,
+                        },
+                        {
+                            "name": "session_name",
+                            "value": session_name,
+                        },
+                        {
+                            "name": "project_name",
+                            "value": project_name,
+                        },
+                        {
+                            "name": "1",
+                            "value": booking_id,
+                        },
+                        {
+                            "name": "expiry_date",
+                            "value": expiry_date,
+                        },
+                    ],
+                    "template_name": "session_booking_reminder_for_participants",
+                },
+            )
     except Exception as e:
         print(f"Error occurred while sending unbooked coaching email : {e}")
 
@@ -1812,6 +2254,70 @@ def send_assessment_invitation_mail_on_click(data):
                 sleep(5)
     except Exception as e:
         print(str(e))
+
+
+@shared_task
+def send_whatsapp_reminder_assessment_on_click(data):
+    participant_observer_ids = data.get("participant_observers")
+    assessment = Assessment.objects.get(id=data.get("assessment_id"))
+    participants_observers = assessment.participants_observers.filter(
+        id__in=participant_observer_ids
+    )
+    for participant_observer_mapping in participants_observers:
+        participant = participant_observer_mapping.participant
+        try:
+            participant_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            )
+            if not participant_response.exists():
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+                )
+                send_whatsapp_message("learner", participant, assessment, unique_id)
+        except ObjectDoesNotExist:
+            print(f"No unique ID found for participant {participant.name}")
+        sleep(2)
+
+
+@shared_task
+def send_email_reminder_assessment_on_click(data):
+    participant_observer_ids = data.get("participant_observers")
+    assessment = Assessment.objects.get(id=data.get("assessment_id"))
+    participants_observers = assessment.participants_observers.filter(
+        id__in=participant_observer_ids
+    )
+    for participant_observer_mapping in participants_observers:
+        participant = participant_observer_mapping.participant
+        try:
+            participant_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            )
+            if not participant_response.exists():
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+                )
+                send_mail_templates(
+                    "assessment/assessment_reminder_mail_to_participant.html",
+                    [participant.email],
+                    "Meeraq - Assessment Reminder !",
+                    {
+                        "assessment_name": assessment.participant_view_name,
+                        "participant_name": participant.name.capitalize(),
+                        "link": assessment_link,
+                    },
+                    [],
+                )
+        except ObjectDoesNotExist:
+            print(f"No unique ID found for participant {participant.name}")
+        sleep(2)
 
 
 # returns start and end time of today in format - YYYY-MM-DDTHH:mm:ss.sssZ
@@ -2115,7 +2621,10 @@ def send_tomorrow_action_items_data():
                     == "laser_coaching_session"
                 ):
                     projects_data[project.name]["laser_coaching_sessions"].append(temp)
-                else:
+                elif (
+                    schedular_session.coaching_session.session_type
+                    == "mentoring_session"
+                ):
                     projects_data[project.name]["mentoring_sessions"].append(temp)
 
             live_sessions = get_live_session_according_to_time(
@@ -2736,25 +3245,26 @@ def invoice_due_email_reminder():
                         "due_date": item.custom_field_hash["cf_due_date"],
                     }
                     line_item_data.append(line_item)
-        send_mail_templates(
-            "due_invoice_email_reminder.html",
-            (
-                [
-                    "finance@meeraq.com",
-                    "kumar@coachtotransformation.com",
-                    "raju@coachtotransformation.com",
-                ]
-                if env("ENVIRONMENT") == "PRODUCTION"
-                else ["tech@meeraq.com"]
-            ),
-            "Invoices due today",
-            {"line_item_data": line_item_data},
-            (
-                ["rajat@meeraq.com", "sujata@meeraq.com"]
-                if env("ENVIRONMENT") == "PRODUCTION"
-                else ["naveen@meeraq.com"]
-            ),
-        )
+        if len(line_item_data) > 0:
+            send_mail_templates(
+                "due_invoice_email_reminder.html",
+                (
+                    [
+                        "finance@meeraq.com",
+                        "kumar@coachtotransformation.com",
+                        "raju@coachtotransformation.com",
+                    ]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["tech@meeraq.com"]
+                ),
+                "Invoices due today",
+                {"line_item_data": line_item_data},
+                (
+                    ["rajat@meeraq.com", "sujata@meeraq.com"]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),
+            )
     except Exception as e:
         print(str(e))
 
@@ -2963,44 +3473,17 @@ def create_batch_calendar(batch):
                 },
                 3,
             )
-
-        elif session_type == "laser_coaching_session":
+        elif session_type in [
+            "laser_coaching_session",
+            "mentoring_session",
+            "action_coaching_session",
+        ]:
             coaching_session_number = (
                 CoachingSession.objects.filter(
                     batch=batch, session_type=session_type
                 ).count()
                 + 1
             )
-            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-            coaching_session = CoachingSession.objects.create(
-                batch=batch,
-                coaching_session_number=coaching_session_number,
-                order=order,
-                duration=duration,
-                booking_link=booking_link,
-                session_type=session_type,
-            )
-            create_task(
-                {
-                    "task": "add_dates",
-                    "schedular_project": batch.project.id,
-                    "project_type": "skill_training",
-                    "coaching_session": coaching_session.id,
-                    "priority": "medium",
-                    "status": "pending",
-                    "remarks": [],
-                },
-                7,
-            )
-
-        elif session_type == "mentoring_session":
-            coaching_session_number = (
-                CoachingSession.objects.filter(
-                    batch=batch, session_type=session_type
-                ).count()
-                + 1
-            )
-
             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
             coaching_session = CoachingSession.objects.create(
                 batch=batch,
@@ -3195,14 +3678,24 @@ def add_batch_to_project(data):
 def send_nudge_reminder_on_trigger_date_at_6pm():
     today = datetime.now().date()
     nudges = Nudge.objects.filter(
-        trigger_date=today,
-        is_sent=False,
-        is_switched_on=True,
-        batch__project__nudges=True,
-        batch__project__status="ongoing",
+        Q(trigger_date=today),
+        Q(is_sent=False),
+        Q(is_switched_on=True),
+        Q(batch__project__nudges=True, batch__project__status="ongoing")
+        | Q(caas_project__nudges=True),
     )
     for nudge in nudges:
-        learners = nudge.batch.learners.all() if nudge.batch else []
+        learners = (
+            nudge.batch.learners.all()
+            if nudge.batch
+            else (
+                Learner.objects.filter(
+                    engagement__project=nudge.caas_project
+                ).distinct()
+                if nudge.caas_project
+                else []
+            )
+        )
         for learner in learners:
             if learner.id not in nudge.learner_ids:
                 nudge_id = nudge.unique_id
@@ -3242,3 +3735,89 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                 nudge.is_sent = True
                 nudge.save()
                 sleep(5)
+
+
+@shared_task
+def result_sending(assessment_id):
+    try:
+        assessment = Assessment.objects.get(id=assessment_id)
+        if assessment.assessment_type == "self":
+            (
+                participant_released_results,
+                created,
+            ) = ParticipantReleasedResults.objects.get_or_create(assessment=assessment)
+            participant_with_released_results = []
+            if not created:
+                participant_with_released_results = (
+                    participant_released_results.participants.all()
+                )
+
+            participant_with_not_released_results = []
+            for participant_observer in assessment.participants_observers.all():
+                participant_response_present = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant=participant_observer.participant,
+                ).exists()
+                if participant_response_present:
+                    if (
+                        participant_observer.participant
+                        not in participant_with_released_results
+                    ):
+                        participant_with_not_released_results.append(
+                            participant_observer.participant
+                        )
+                        participant_released_results.participants.add(
+                            participant_observer.participant
+                        )
+
+            participant_released_results.save()
+
+            if len(assessment.participants_observers.all()) == (
+                len(participant_with_released_results)
+                + len(participant_with_not_released_results)
+            ):
+                assessment.result_released = True
+                assessment.save()
+
+            for participant in participant_with_not_released_results:
+
+                encoded_image = None
+                compentency_with_description = None
+                if (
+                    assessment.assessment_timing == "pre"
+                    or assessment.assessment_timing == "none"
+                ):
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant(
+                        participant, assessment.id, assessment
+                    )
+                elif assessment.assessment_timing == "post":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant_for_post_assessment(
+                        participant, assessment.id, assessment
+                    )
+                send_mail_templates(
+                    "assessment/air_india_report_mail.html",
+                    [participant.email],
+                    "Meeraq Assessment Report",
+                    {
+                        "name": participant.name.title(),
+                        "image_base64": encoded_image,
+                        "compentency_with_description": compentency_with_description,
+                        "assessment_timing": assessment.assessment_timing,
+                        "assessment_name": assessment.participant_view_name,
+                    },
+                    [],
+                )
+                sleep(5)
+
+        else:
+            assessment.result_released = True
+            assessment.save()
+
+    except Exception as e:
+        print(str(e))

@@ -9,6 +9,7 @@ from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
 from rest_framework import generics, serializers, status
 from datetime import timedelta, time, datetime, date
+from django.db.models.functions import Concat
 from .models import (
     Course,
     TextLesson,
@@ -38,6 +39,7 @@ from .models import (
     CoachingSessionsFeedbackResponse,
     CttFeedback,
     CttFeedbackResponse,
+    NudgeResources,
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -76,11 +78,24 @@ from .serializers import (
     FeedbackDepthOneSerializer,
     LessonSerializerForLiveSessionDateTime,
     CttFeedbackDepthOneSerializer,
+    NudgeResourcesSerializer,
+    NudgeResourcesSerializerDepthOne,
+    NudgeResourcesSerializerDepthOneProjectNames,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas
+from api.models import (
+    User,
+    Learner,
+    Profile,
+    Role,
+    Coach,
+    SessionRequestCaas,
+    Project,
+    Curriculum,
+)
+from api.serializers import ProjectSerializer
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -116,7 +131,8 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
-from django.db.models import Max, Q
+from django.db.models import Max, Q, CharField
+from django.db.models import Value
 import environ
 import uuid
 import logging
@@ -335,6 +351,9 @@ def create_lessons_for_batch(batch):
                 session_name = "Laser coaching"
             elif coaching_session.session_type == "mentoring_session":
                 session_name = "Mentoring session"
+            elif coaching_session.session_type == "action_coaching_session":
+                session_name = "Action Coaching Session"
+
             new_lesson = Lesson.objects.create(
                 course=course,
                 name=f"{session_name} {coaching_session.coaching_session_number}",
@@ -588,39 +607,146 @@ def create_new_nudge(request):
         nudge_instance.unique_id = uuid.uuid4()
         nudge_instance.save()
         # complete add nudge task
-        try:
-            tasks = Task.objects.filter(
-                task="add_nudges",
-                status="pending",
-                schedular_batch=nudge_instance.batch,
-            )
-            tasks.update(status="completed")
-        except Exception as e:
-            print(str(e))
-            pass
-        nudges_start_date = nudge_instance.batch.nudge_start_date
-        today_date = datetime.today().date()
-        if nudges_start_date and nudges_start_date <= today_date:
+        if nudge_instance.batch:
+            nudges_start_date = nudge_instance.batch.nudge_start_date
             last_nudge = (
                 Nudge.objects.filter(batch=nudge_instance.batch)
                 .exclude(id=nudge_instance.id)
                 .order_by("-order")
                 .first()
             )
+            nudge_frequency = nudge_instance.batch.nudge_frequency
+            try:
+                tasks = Task.objects.filter(
+                    task="add_nudges",
+                    status="pending",
+                    schedular_batch=nudge_instance.batch,
+                )
+                tasks.update(status="completed")
+            except Exception as e:
+                print(str(e))
+                pass
+        elif nudge_instance.caas_project:
+            nudges_start_date = nudge_instance.caas_project.nudge_start_date
+            last_nudge = (
+                Nudge.objects.filter(caas_project=nudge_instance.caas_project)
+                .exclude(id=nudge_instance.id)
+                .order_by("-order")
+                .first()
+            )
+            nudge_frequency = nudge_instance.caas_project.nudge_frequency
+
+        today_date = datetime.today().date()
+
+        if nudges_start_date and nudges_start_date <= today_date:
             if last_nudge:
                 last_nudge_date = last_nudge.trigger_date
                 nudge_instance.trigger_date = last_nudge_date + timedelta(
-                    int(nudge_instance.batch.nudge_frequency)
+                    int(nudge_frequency)
                 )
                 nudge_instance.save()
             else:
                 nudge_instance.trigger_date = nudges_start_date + timedelta(
-                    int(nudge_instance.batch.nudge_frequency)
+                    int(nudge_frequency)
                 )
                 nudge_instance.save()
         serializer = NudgeSerializer(nudge_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def get_all_nudge_resources(request):
+    nudges_resources = NudgeResources.objects.all().order_by("-created_at")
+
+    serializer = NudgeResourcesSerializerDepthOne(nudges_resources, many=True)
+
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def get_all_nudge_resources_by_project(request, project_or_batch_id, project_type):
+    nudges_resources = None
+    if project_type == "caas":
+        nudges_resources = NudgeResources.objects.filter(
+            caas_project_assigned__id=project_or_batch_id
+        ).order_by("-created_at")
+    elif project_type == "skill_training":
+        batch = SchedularBatch.objects.get(id=project_or_batch_id)
+        nudges_resources = NudgeResources.objects.filter(
+            skill_project_assigned__id=batch.project.id
+        ).order_by("-created_at")
+
+    serializer = NudgeResourcesSerializerDepthOne(nudges_resources, many=True)
+
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def create_new_nudge_resources(request):
+    try:
+
+        serializer = NudgeResourcesSerializer(data=request.data)
+
+        if serializer.is_valid():
+            nudge_instance = serializer.save()
+
+            serializer = NudgeResourcesSerializer(nudge_instance)
+
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def update_nudge_resource(request, nudge_id):
+    try:
+        nudge_resource = NudgeResources.objects.get(id=nudge_id)
+    except NudgeResources.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if "status" in request.data:
+        # Update only the status
+        nudge_resource.status = request.data["status"]
+        nudge_resource.save()
+        return Response({"status": nudge_resource.status})
+
+    serializer = NudgeResourcesSerializer(
+        nudge_resource, data=request.data, partial=True
+    )
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+@transaction.atomic
+def delete_nudge_resource(request):
+    try:
+        nudge_id = request.data.get("id")
+        nudge_resource = NudgeResources.objects.get(id=nudge_id)
+        nudge_resource.delete()
+        return Response(
+            {"message": "Nudge resource deleted successfully!"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete nudge resource"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["PUT"])
@@ -645,46 +771,58 @@ def download_nudge_file(request, nudge_id):
     return download_file_response(serializer.data["file"])
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def download_nudge_resource_file(request, nudge_id):
+    nudge_obj = get_object_or_404(NudgeResources, id=nudge_id)
+    serializer = NudgeResourcesSerializer(nudge_obj)
+    return download_file_response(serializer.data["file"])
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
-def add_nudges_date_frequency_to_batch(request, batch_id):
+def add_nudges_date_frequency_to_batch(request, instance_type, instance_id):
     try:
-        batch = SchedularBatch.objects.get(id=batch_id)
+        if instance_type == "batch":
+            instance = SchedularBatch.objects.get(id=instance_id)
+        elif instance_type == "project":
+            instance = Project.objects.get(id=instance_id)
+
         nudge_start_date = request.data.get("nudge_start_date")
         nudge_frequency = request.data.get("nudge_frequency")
-        batch.nudge_start_date = nudge_start_date
-        batch.nudge_frequency = nudge_frequency
-        batch.save()
-        if batch.nudge_periodic_task:
-            batch.nudge_periodic_task.enabled = False
-            batch.nudge_periodic_task.save()
+        instance.nudge_start_date = nudge_start_date
+        instance.nudge_frequency = nudge_frequency
+        instance.save()
+        if instance.nudge_periodic_task:
+            instance.nudge_periodic_task.enabled = False
+            instance.nudge_periodic_task.save()
         desired_time = time(18, 31)
         datetime_comined = datetime.combine(
-            datetime.strptime(batch.nudge_start_date, "%Y-%m-%d"), desired_time
+            datetime.strptime(instance.nudge_start_date, "%Y-%m-%d"), desired_time
         )
         scheduled_for = datetime_comined - timedelta(days=1)
         clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
         periodic_task = PeriodicTask.objects.create(
             name=uuid.uuid1(),
             task="schedularApi.tasks.schedule_nudges",
-            args=[batch.id],
+            args=[instance.id, instance_type],
             clocked=clocked,
             one_off=True,
         )
-        batch.nudge_periodic_task = periodic_task
-        batch.save()
+        instance.nudge_periodic_task = periodic_task
+        instance.save()
         # complete tasks for nudge
-        try:
-            tasks = Task.objects.filter(
-                task="add_nudge_date_and_frequency",
-                status="pending",
-                schedular_batch=batch,
-            )
-            tasks.update(status="completed")
-        except Exception as e:
-            print(str(e))
-            pass
-
+        if instance_type == "batch":
+            try:
+                tasks = Task.objects.filter(
+                    task="add_nudge_date_and_frequency",
+                    status="pending",
+                    schedular_batch=instance,
+                )
+                tasks.update(status="completed")
+            except Exception as e:
+                print(str(e))
+                pass
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -1200,6 +1338,7 @@ def create_assessment_and_lesson(request):
         lesson_data = request.data.get("lesson")
         lesson_serializer1 = LessonSerializer(data=lesson_data)
         lesson_serializer2 = LessonSerializer(data=lesson_data)
+        course = lesson_data["course"]
         if lesson_serializer1.is_valid() and lesson_serializer2.is_valid():
             lesson1 = lesson_serializer1.save()
             lesson2 = lesson_serializer2.save()
@@ -1210,9 +1349,16 @@ def create_assessment_and_lesson(request):
             lesson1.save()
             lesson2.save()
 
-            assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+            if course:
+                course = Course.objects.get(id=course)
+                if course.batch.project.pre_assessment:
+                    assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+                if course.batch.project.post_assessment:
+                    assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+            else:
+                assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+                assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
 
-            assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
             return Response(
                 "Assessment lesson created successfully", status=status.HTTP_201_CREATED
             )
@@ -2518,20 +2664,18 @@ class AssignCourseTemplateToBatch(APIView):
                     lesson=facilitator_lesson_creation,
                 )
                 assessment_creation = False
-                if not original_lessons.filter(lesson_type="assessment").exists():
-                    if batch.project.pre_post_assessment:
-                        assessment_creation = True
-                        lesson1 = Lesson.objects.create(
-                            course=new_course,
-                            name="Pre Assessment",
-                            status="draft",
-                            lesson_type="assessment",
-                            # Duplicate specific lesson types
-                            order=2,
-                        )
-                        assessment1 = Assessment.objects.create(
-                            lesson=lesson1, type="pre"
-                        )
+
+                if batch.project.pre_assessment:
+                    assessment_creation = True
+                    lesson1 = Lesson.objects.create(
+                        course=new_course,
+                        name="Pre Assessment",
+                        status="draft",
+                        lesson_type="assessment",
+                        # Duplicate specific lesson types
+                        order=2,
+                    )
+                    assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -2572,12 +2716,6 @@ class AssignCourseTemplateToBatch(APIView):
                                 lesson=new_lesson,
                                 file=original_lesson.downloadablelesson.file,
                                 description=original_lesson.downloadablelesson.description,
-                            )
-                        elif original_lesson.lesson_type == "assignment":
-                            AssignmentLesson.objects.create(
-                                lesson=new_lesson,
-                                name=original_lesson.assignmentlesson.name,
-                                description=original_lesson.assignmentlesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
                             assessment = Assessment.objects.filter(
@@ -2624,7 +2762,7 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-                if assessment_creation:
+                if batch.project.post_assessment:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
                             Max("order")
@@ -3752,6 +3890,17 @@ def get_nudges_by_project_id(request, project_id):
     return Response(serializer.data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_nudges_of_coaching_project(request, project_id):
+    # Retrieve nudges filtered by project_id
+    project = Project.objects.get(id=project_id)
+    project_serializer = ProjectSerializer(project)
+    nudges = Nudge.objects.filter(caas_project=project)
+    serializer = NudgeSerializer(nudges, many=True)
+    return Response({"nudges": serializer.data, "project": project_serializer.data})
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_nudge_to_email(request, nudge_id):
@@ -3777,17 +3926,25 @@ def send_nudge_to_email(request, nudge_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
-def duplicate_nudge(request, nudge_id, batch_id):
+def duplicate_nudge(request, nudge_id, instance_type, instance_id):
     order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
-        batch = SchedularBatch.objects.get(id=batch_id)  # Fetch the batch instance
+        batch = None
+        project = None
+        if instance_type == "batch":
+            batch = SchedularBatch.objects.get(
+                id=instance_id
+            )  # Fetch the batch instance
+        elif instance_type == "project":
+            project = Project.objects.get(id=instance_id)  # Fetch the batch instance
         duplicated_nudge = Nudge.objects.create(
             name=f"{original_nudge.name}",
             content=original_nudge.content,
             file=original_nudge.file,
             order=order,
             batch=batch,
+            caas_project=project,
             is_sent=False,
             unique_id=str(uuid.uuid4()),
         )
@@ -4288,8 +4445,11 @@ def get_released_certificates_for_learner(request, learner_id):
 def get_all_nudges_for_that_learner(request, learner_id):
     try:
         nudges = Nudge.objects.filter(
-            is_sent=True, is_switched_on=True, batch__learners__id=learner_id
-        )
+            Q(is_sent=True),
+            Q(is_switched_on=True),
+            Q(batch__learners__id=learner_id)
+            | Q(caas_project__engagement__learner__id=learner_id),
+        ).distinct()
         serializer = NudgeSerializer(nudges, many=True)
         return Response({"nudges": serializer.data})
     except Nudge.DoesNotExist:
@@ -4309,6 +4469,19 @@ def get_nudge_data(request, nudge_id):
         serializer = NudgeSerializer(nudge)
         return Response({"nudge": serializer.data})
     except Nudge.DoesNotExist:
+        return JsonResponse({"error": "Nudge not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nudge_resource_data(request, nudge_id):
+    try:
+        nudge = NudgeResources.objects.get(id=nudge_id)
+        serializer = NudgeResourcesSerializer(nudge)
+        return Response({"nudge": serializer.data})
+    except NudgeResources.DoesNotExist:
         return JsonResponse({"error": "Nudge not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
@@ -4384,12 +4557,11 @@ def create_ctt_feedback(request):
         return Response({"error": "Failed to create feedback"}, status=500)
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
-def edit_ctt_feedback(request,feedback_id):
+def edit_ctt_feedback(request, feedback_id):
     try:
-        feedback = CttFeedback.objects.get(id = feedback_id)
+        feedback = CttFeedback.objects.get(id=feedback_id)
 
         questions = request.data.get("questions")
         name = request.data.get("name")
@@ -4414,18 +4586,19 @@ def edit_ctt_feedback(request,feedback_id):
 
         unique_id = uuid.uuid4()
 
-        feedback.name=name
-        feedback.unique_id=unique_id
-        feedback.ctt_batch=batch_id
-        feedback.session_number=session_number
+        feedback.name = name
+        feedback.unique_id = unique_id
+        feedback.ctt_batch = batch_id
+        feedback.session_number = session_number
         # Add questions to the CttFeedback instance
         feedback.questions.set(question_ids)
         feedback.save()
         return Response({"message": "Feedback updated successfully!"}, status=200)
-    
+
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update feedback"}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -4488,14 +4661,12 @@ def get_ctt_feedback_report(request, feedback_id):
                     question_data[question_id]["descriptive_answers"].append(
                         answer.text_answer
                     )
-                elif  answer.question.type == "single_correct_answer":
+                elif answer.question.type == "single_correct_answer":
                     print(answer.selected_options, answer.text_answer)
                     question_data[question_id]["selected_options"].append(
                         [answer.text_answer]
                     )
-                elif (
-                   answer.question.type == "multiple_correct_answer"
-                ):
+                elif answer.question.type == "multiple_correct_answer":
                     question_data[question_id]["selected_options"].append(
                         answer.selected_options
                     )
@@ -4541,4 +4712,3 @@ def update_ctt_feedback_status(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update status"}, status=500)
-

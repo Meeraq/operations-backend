@@ -19,10 +19,12 @@ from .models import (
     GmSheet,
     Offering,
     Benchmark,
+    Employee,
+    FacilitatorContract,
 )
 from api.models import Coach
 from api.models import Sales
-
+from zohoapi.models import SalesOrder
 
 class SchedularProjectSerializer(serializers.ModelSerializer):
     class Meta:
@@ -49,6 +51,18 @@ class SessionItemSerializer(serializers.Serializer):
         max_digits=10, decimal_places=2, allow_null=True, required=False
     )
 
+
+class FacilitatorContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorContract
+        fields = "__all__"
+        depth= 1
+
+class FacilitatorContractSerializerNoDepth(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorContract
+        fields = "__all__"
+        
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
@@ -236,6 +250,18 @@ class BenchmarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = Benchmark
         fields = "__all__"
+        
+class AssetsDetailedSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.SerializerMethodField()
+
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}"
+        return None
+
+    class Meta:
+        model = Assets
+        fields = "__all__"
 
 class GmSheetDetailedSerializer(serializers.ModelSerializer):
     sales_name = serializers.CharField(source="sales.name", allow_null=True)   
@@ -247,6 +273,22 @@ class GmSheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = GmSheet
         fields = '__all__'
+        
+class EmployeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields =  '__all__'
+
+class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
+    sales_order_exists = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GmSheet
+        fields = '__all__'
+
+    def get_sales_order_exists(self, obj):
+        return SalesOrder.objects.filter(gm_sheet_id=obj.id).exists()
+
 
 class OfferingSerializer(serializers.ModelSerializer):
     class Meta:

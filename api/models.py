@@ -19,6 +19,7 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
+from django.utils import timezone
 
 import environ
 
@@ -216,6 +217,18 @@ class Leader(models.Model):
 
     def __str__(self):
         return self.name
+    
+class Curriculum(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
+    active_inactive = models.BooleanField(default=True)
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
 
 class Pmo(models.Model):
@@ -335,6 +348,7 @@ class Facilitator(models.Model):
     education = models.JSONField(default=list, blank=True)
     corporate_experience = models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
+    remarks = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
@@ -490,6 +504,14 @@ class Project(models.Model):
     )
     credit_history = models.JSONField(default=list, blank=True)
     is_session_expiry = models.BooleanField(blank=True, default=False)
+    nudges = models.BooleanField(blank=True, default=True)
+    pre_assessment = models.BooleanField(blank=True, default=True)
+    post_assessment = models.BooleanField(blank=True, default=True)
+    nudge_start_date = models.DateField(default=None, blank=True, null=True)
+    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
+    nudge_periodic_task = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -768,6 +790,8 @@ class StandardizedField(models.Model):
         ("topic", "Topic"),
         ("product_type", "Product Type"),
         ("category", "Category"),
+        ("asset_location","Location"),
+        ("project_type","Project Type"),,
     )
 
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
@@ -948,3 +972,72 @@ class TableHiddenColumn(models.Model):
     hidden_columns = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class UserFeedback(models.Model):
+    user_types = [
+        ("pmo", "pmo"),
+        ("coach", "coach"),
+        ("learner", "learner"),
+        ("hr", "hr"),
+        ("facilitator", "facilitator"),
+    ]
+    feedback_type_choices = [
+        ("bulk_upload_of_coach", "Bulk Upload of Coach"),
+        ("bulk_upload_of_facilitator", "Bulk Upload of Facilitator"),
+        ("bulk_upload_of_batch", "Bulk Upload of Batch"),
+        ("bulk_upload_of_questions", "Bulk Upload of Questions"),
+        ("bulk_upload_of_participant", "Bulk Upload of Participant"),
+        ("assigning_certificate", "Assigning Certificate"),
+        ("assign_the_course", "Assign the Course"),
+        ("requesting_availability_of_coach", "Requesting Availability of Coach"),
+        ("adding_facilitator", "Adding Facilitator"),
+        ("adding_coach", "Adding Coach"),
+        ("editing_coach", "Editing Coach"),
+        ("editing_facilitator", "Editing Facilitator"),
+        ("editing_coachee", "Editing Coachee"),
+        ("video_upload_inside_lesson", "Video Upload inside Lesson"),
+        ("video_upload_inside_video_library", "Video Upload Inside Video Library"),
+        ("pdf_upload_inside_lesson", "PDF Upload inside Lesson"),
+        ("pdf_upload_inside_pdf_library", "PDF Upload Inside PDF Library"),
+        ("coach_editing_the_profile", "Coach Editing the Profile"),
+        ("coach_giving_his_availability", "Coach Giving his Availability"),
+        ("learner_requesting_a_session", "Learner Requesting a Session"),
+        ("learner_editing_the_profile", "Learner Editing the Profile"),
+        ("learner_course_engagement", "Learner Course Engagement"),
+        ("facilitator_editing_profile", "Facilitator Editing Profile"),
+        ("hr_downloading_report", "HR Downloading Report"),
+    ]
+    hr = models.ForeignKey(
+        HR, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+    pmo = models.ForeignKey(
+        Pmo, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+    learner = models.ForeignKey(
+        Learner, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+    coach = models.ForeignKey(
+        Coach, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+    feedback_type = models.CharField(max_length=100, choices=feedback_type_choices)
+    response = models.BooleanField(blank=True)
+    comments = models.TextField(blank=True, default="")
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class ChatHistory(models.Model):
+    prompt = models.TextField(blank=True, null=True, default=None)
+    response = models.TextField(blank=True, null=True, default=None)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
+    is_old = models.BooleanField(blank=True,default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Chat History for {self.user}"
+

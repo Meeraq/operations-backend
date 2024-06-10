@@ -74,6 +74,11 @@ from .views import (
     GetAssessmentBatchAndProject,
     DownloadQuestionWiseExcelForProject,
     ResponseDownloadForAllParticipants,
+    CreateCoachingAssessmentAndAddMultipleParticipants,
+    GetAssessmentOfCoachingProject,
+    StoreTempResponseParticipantObserver,
+    GetTempResponseParticipantObserver,
+    AutomateResultChange,
 )
 
 
@@ -354,5 +359,33 @@ urlpatterns = [
         "delete-batch-competency/<int:course_competency_id>/",
         views.delete_batch_competency,
         name="delete_batch_competency",
+    ),
+    path(
+        "create-coaching-assessment-and-add-multiple-participants/",
+        CreateCoachingAssessmentAndAddMultipleParticipants.as_view(),
+    ),
+    path(
+        "get-assessment-of-coaching-project/<int:project_id>/",
+        GetAssessmentOfCoachingProject.as_view(),
+    ),
+    path(
+        "assessment/<int:assessment_id>/send-whatsapp-reminder/",
+        views.send_whatsapp_reminder,
+    ),
+    path(
+        "assessment/<int:assessment_id>/send-email-reminder/",
+        views.send_email_reminder,
+    ),
+    path(
+        "store-temp-password/<str:user_type>/<str:unique_id>/",
+        StoreTempResponseParticipantObserver.as_view(),
+    ),
+    path(
+        "get-temp-password/<str:user_type>/<str:unique_id>/",
+        GetTempResponseParticipantObserver.as_view(),
+    ),
+    path(
+        "automate-result-change/<int:assessment_id>/",
+        AutomateResultChange.as_view(),
     ),
 ]

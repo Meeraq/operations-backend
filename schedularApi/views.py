@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from collections import defaultdict
 import uuid
 import requests
 import random
@@ -67,6 +68,7 @@ from api.models import (
     SessionRequestCaas,
     Sales,
 )
+from decimal import Decimal
 
 from .serializers import (
     SchedularProjectSerializer,
@@ -104,6 +106,10 @@ from .serializers import (
     HandoverDetailsSerializerWithOrganisationName,
     AssetsSerializer,
     GmSheetDetailedSerializer,
+    AssetsDetailedSerializer,
+    EmployeeSerializer,
+    GmSheetSalesOrderExistsSerializer,
+    FacilitatorContractSerializerNoDepth,
 )
 from .models import (
     SchedularBatch,
@@ -129,6 +135,8 @@ from .models import (
     GmSheet,
     Benchmark,
     Assets,
+    Employee,
+    FacilitatorContract,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -151,6 +159,7 @@ from courses.models import (
     Lesson,
     Certificate,
     Answer,
+    Assessment as AssessmentLesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -184,20 +193,26 @@ from api.views import (
     delete_outlook_calendar_invite,
     create_teams_meeting,
     delete_teams_meeting,
+    create_learner,
 )
 from django.db.models import Max
 import io
 from time import sleep
-from assessmentApi.views import delete_participant_from_assessments
+from assessmentApi.views import (
+    delete_participant_from_assessments,
+    add_multiple_participants_for_project,
+)
 from assessmentApi.serializers import (
     CompetencySerializerDepthOne,
     ActionItemSerializer,
     ActionItemDetailedSerializer,
     CompetencySerializer,
     BehaviorSerializer,
+    AssessmentSerializer,
 )
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
+    celery_send_unbooked_coaching_session_whatsapp_message,
     get_current_date_timestamps,
     get_coaching_session_according_to_time,
     get_live_session_according_to_time,
@@ -366,7 +381,8 @@ def create_project_schedular(request):
             whatsapp_reminder=project_details["whatsapp_reminder"],
             calendar_invites=project_details["calendar_invites"],
             nudges=project_details["nudges"],
-            pre_post_assessment=project_details["pre_post_assessment"],
+            pre_assessment=project_details["pre_assessment"],
+            post_assessment=project_details["post_assessment"],
             is_finance_enabled=project_details["finance"],
             teams_enabled=project_details["teams_enabled"],
             project_type=project_details["project_type"],
@@ -508,62 +524,87 @@ def get_current_or_next_year(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("leader")])
-def edit_benchmark(request):
+def update_benchmark(request):
+    year = request.data.get("year", None)  # Extract year from request data
+    benchmark_data = request.data.get(
+        "benchmark", None
+    )  # Extract benchmark data from request data
+
+    if year is None:
+        return Response(
+            {"error": "Year is required in the payload"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
-        benchmarks_data = request.data.get("lineItems")
-        updated_benchmarks = []
+        benchmark = Benchmark.objects.get(year=year)
+    except Benchmark.DoesNotExist:
+        return Response(
+            {"error": f"Benchmark for year {year} does not exist"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
-        with transaction.atomic():
-            for benchmark_data in benchmarks_data:
-                benchmark_id = benchmark_data.get("id")
-                if not benchmark_id:
-                    return Response(
-                        {"error": "Benchmark ID is required for updating"}, status=400
-                    )
-
-                try:
-                    benchmark = Benchmark.objects.get(id=benchmark_id)
-                except Benchmark.DoesNotExist:
-                    return Response(
-                        {"error": f"Benchmark with ID {benchmark_id} does not exist"},
-                        status=404,
-                    )
-
-                serializer = BenchmarkSerializer(
-                    benchmark, data=benchmark_data, partial=True
-                )
-                if serializer.is_valid():
-                    serializer.save()
-                    updated_benchmarks.append(serializer.data)
-                else:
-                    return Response(serializer.errors, status=400)
-
-        return Response(updated_benchmarks, status=200)  # Return the updated benchmarks
-    except Exception as e:
-        return Response({"error": str(e)}, status=500)
+    if request.method == "PUT":
+        serializer = BenchmarkSerializer(
+            benchmark, data={"project_type": benchmark_data}, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("leader")])
 def create_benchmark(request):
-    try:
-        benchmarks_data = request.data.get("lineItems")
-        created_benchmarks = []
+    year = request.data.get("year")
+    if not year:
+        return Response(
+            {"error": "Year is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
 
-        with transaction.atomic():
-            for benchmark_data in benchmarks_data:
-                serializer = BenchmarkSerializer(data=benchmark_data)
-                if serializer.is_valid():
-                    serializer.save()
-                    created_benchmarks.append(serializer.data)
-                else:
-                    # If any benchmark data is invalid, return the errors
-                    return Response(serializer.errors, status=400)
+    # Fetch all existing benchmarks
+    existing_benchmarks = Benchmark.objects.all()
 
-        return Response(created_benchmarks, status=201)  # Return the created benchmarks
-    except Exception as e:
-        return Response({"error": str(e)}, status=500)
+    # Gather project_type keys from existing benchmarks
+    project_type_keys = set()
+    for benchmark in existing_benchmarks:
+        project_type_keys.update(benchmark.project_type.keys())
+
+    # Create new project_type with keys and empty string values
+    project_type = {key: "" for key in project_type_keys}
+
+    data = {
+        "year": year,
+        "project_type": project_type,
+    }
+
+    serializer = BenchmarkSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated, IsInRoles("leader")])
+# def create_benchmark(request):
+#     try:
+#         benchmarks_data = request.data.get("lineItems")
+#         created_benchmarks = []
+
+#         with transaction.atomic():
+#             for benchmark_data in benchmarks_data:
+#                 serializer = BenchmarkSerializer(data=benchmark_data)
+#                 if serializer.is_valid():
+#                     serializer.save()
+#                     created_benchmarks.append(serializer.data)
+#                 else:
+#                     # If any benchmark data is invalid, return the errors
+#                     return Response(serializer.errors, status=400)
+
+#         return Response(created_benchmarks, status=201)  # Return the created benchmarks
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=500)
 
 
 @api_view(["GET"])
@@ -603,23 +644,23 @@ def create_gmsheet(request):
                             )
 
                 # Sending email notification
-                send_mail_templates(
-                    "leader_emails/gm_sheet_created.html",
-                    (
-                        ["sujata@meeraq.com"]
-                        if env("ENVIRONMENT") == "PRODUCTION"
-                        else ["naveen@meeraq.com"]
-                    ),  # Update with the recipient's email address
-                    "New GM Sheet created",
-                    {
-                        "projectName": gm_sheet.project_name,
-                        "clientName": gm_sheet.client_name,
-                        "startdate": gm_sheet.start_date,
-                        "projectType": gm_sheet.project_type,
-                        "salesName": gm_sheet.sales.name,
-                    },
-                    [],  # No BCC
-                )
+                # send_mail_templates(
+                #     "leader_emails/gm_sheet_created.html",
+                #     (
+                #         ["sujata@meeraq.com"]
+                #         if env("ENVIRONMENT") == "PRODUCTION"
+                #         else ["naveen@meeraq.com"]
+                #     ),  # Update with the recipient's email address
+                #     "New GM Sheet created",
+                #     {
+                #         "projectName": gm_sheet.project_name,
+                #         "clientName": gm_sheet.client_name,
+                #         "startdate": gm_sheet.start_date,
+                #         "projectType": gm_sheet.project_type,
+                #         "salesName": gm_sheet.sales.name,
+                #     },
+                #     [],  # No BCC
+                # )
 
                 return Response(
                     gm_sheet_serializer.data, status=status.HTTP_201_CREATED
@@ -647,7 +688,6 @@ def update_is_accepted_status(request, pk):
         # Call send_mail_templates if is_accepted is True
         if data["is_accepted"]:
             template_name = "gm_sheet_approved.html"
-           
             subject = "GM Sheet approved"
             context_data = {
                 "projectName": gm_sheet.project_name,
@@ -672,6 +712,23 @@ def update_is_accepted_status(request, pk):
     # Check if deal_status is present in request data
     if "deal_status" in request.data:
         data["deal_status"] = request.data.get("deal_status")
+        all_offerings = Offering.objects.filter(gm_sheet=gm_sheet)
+        all_offerings.update(is_won=False)
+        if data["deal_status"].lower() == "won":
+            offering_id = request.data.get("offering_id")
+            if not offering_id:
+                return Response(
+                    {"error": "Offering ID not provided"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                offering = Offering.objects.get(pk=offering_id)
+                offering.is_won = True
+                offering.save()
+            except Offering.DoesNotExist:
+                return Response(
+                    {"error": "Offering not found"}, status=status.HTTP_404_NOT_FOUND
+                )
 
     gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=data, partial=True)
     if gm_sheet_serializer.is_valid():
@@ -731,14 +788,85 @@ def update_gmsheet(request, id):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
-            return Response(
-                {"message": "Update Successfully"}, status=status.HTTP_200_OK
-            )
+            return Response(gm_sheet_serializer.data, status=status.HTTP_200_OK)
         else:
             print("hey", gm_sheet_serializer.errors)
             return Response(
                 gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
             )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@transaction.atomic
+def add_offerings(request, id):
+    try:
+        gm_sheet = GmSheet.objects.get(id=id)
+        existing_offerings = Offering.objects.filter(gm_sheet=gm_sheet)
+        is_add_offering = True if existing_offerings.count() == 0 else False
+        # Handle offerings update
+        offerings_data = request.data.get("offerings", [])
+        for offering_data in offerings_data:
+            offering_id = offering_data.get("id")
+            if offering_id:
+                try:
+                    offering_instance = Offering.objects.get(
+                        id=offering_id, gm_sheet=gm_sheet
+                    )
+                    offering_serializer = OfferingSerializer(
+                        offering_instance, data=offering_data, partial=True
+                    )
+                    if offering_serializer.is_valid():
+                        offering_serializer.save()
+                    else:
+                        print(offering_serializer.errors)
+                        return Response(
+                            offering_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                except Offering.DoesNotExist:
+                    return Response(
+                        {"error": "Offering not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                offering_data["gm_sheet"] = gm_sheet.id
+                offering_serializer = OfferingSerializer(data=offering_data)
+                if offering_serializer.is_valid():
+                    offering_serializer.save()
+                else:
+                    print("offering_serializer.errors")
+                    return Response(
+                        offering_serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        if is_add_offering:
+            send_mail_templates(
+                "leader_emails/gm_sheet_created.html",
+                (
+                    ["sujata@meeraq.com"]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),  # Update with the recipient's email address
+                "New GM Sheet created",
+                {
+                    "projectName": gm_sheet.project_name,
+                    "clientName": gm_sheet.client_name,
+                    "startdate": gm_sheet.start_date,
+                    "projectType": gm_sheet.project_type,
+                    "salesName": gm_sheet.sales.name,
+                },
+                [],  # No BCC
+            )
+
+        return Response({"message": "Update Successfully"}, status=status.HTTP_200_OK)
 
     except Exception as e:
         print(str(e))
@@ -878,8 +1006,17 @@ def create_asset(request):
         update_entry = {
             "date": str(datetime.now()),
             "status": instance.status,
-            "assigned_to": instance.assigned_to,
         }
+
+        if instance.assigned_to is not None:
+            update_entry["assigned_to"] = instance.assigned_to.id
+            update_entry["assigned_to_name"] = (
+                instance.assigned_to.first_name + " " + instance.assigned_to.last_name
+            )
+        else:
+            update_entry["assigned_to"] = None
+            update_entry["assigned_to_name"] = None
+
         instance.updates.append(update_entry)
         instance.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -890,7 +1027,7 @@ def create_asset(request):
 def get_all_assets(request):
     if request.method == "GET":
         assets = Assets.objects.all().order_by("-update_at")
-        serializer = AssetsSerializer(assets, many=True)
+        serializer = AssetsDetailedSerializer(assets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -914,27 +1051,46 @@ def update_asset(request):
     payload = request.data
     values = payload.get("values")
     asset_id = payload.get("id")
+
     if not asset_id:
         return Response(
             {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
         )
+
     try:
         asset = Assets.objects.get(id=asset_id)
     except Assets.DoesNotExist:
         return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+
     serializer = AssetsSerializer(
         asset, data=values, partial=True
     )  # Use partial=True for partial updates
+
     if serializer.is_valid():
         instance = serializer.save()
+
         update_entry = {
-            "date": str(datetime.now()),
+            "date": datetime.now().isoformat(),
             "status": instance.status,
-            "assigned_to": instance.assigned_to,
+            "assigned_to": instance.assigned_to.id if instance.assigned_to else None,
+            "assigned_to_name": (
+                f"{instance.assigned_to.first_name} {instance.assigned_to.last_name}"
+                if instance.assigned_to
+                else None
+            ),
         }
+
+        # Ensure updates field is a list before appending
+        if not isinstance(instance.updates, list):
+            instance.updates = []
+
         instance.updates.append(update_entry)
         instance.save()
-        return Response(serializer.data)
+
+        # Use AssetsDetailedSerializer to include assigned_to_name in the response
+        detailed_serializer = AssetsDetailedSerializer(instance)
+        return Response(detailed_serializer.data)
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -961,21 +1117,26 @@ def update_status(request):
 
         asset.status = new_status
         if new_status == "idle":
-            asset.assigned_to = ""
+            asset.assigned_to = None
+
+        # Serialize the assigned_to field
+        assigned_to = asset.assigned_to.id if asset.assigned_to else None
 
         # Append the update to the updates field
         update_entry = {
             "date": str(datetime.now()),
             "status": new_status,
-            "assigned_to": asset.assigned_to,
+            "assigned_to": assigned_to,
         }
-        if not hasattr(asset, 'updates'):
+        if not hasattr(asset, "updates"):
             asset.updates = []  # Initialize if 'updates' field does not exist
         asset.updates.append(update_entry)
 
         asset.save()
         return Response({"success": "Status updated successfully"})
-    return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    return Response(
+        {"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
+    )
 
 
 @api_view(["GET"])
@@ -1104,6 +1265,7 @@ def create_coach_pricing(batch, coach):
         if session["session_type"] in [
             "laser_coaching_session",
             "mentoring_session",
+            "action_coaching_session",
         ]:
             coaching_session = CoachingSession.objects.filter(
                 batch=batch,
@@ -1187,42 +1349,17 @@ def create_batch_calendar(batch):
                 },
                 3,
             )
-        elif session_type == "laser_coaching_session":
+        elif session_type in [
+            "laser_coaching_session",
+            "mentoring_session",
+            "action_coaching_session",
+        ]:
             coaching_session_number = (
                 CoachingSession.objects.filter(
                     batch=batch, session_type=session_type
                 ).count()
                 + 1
             )
-            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-            coaching_session = CoachingSession.objects.create(
-                batch=batch,
-                coaching_session_number=coaching_session_number,
-                order=order,
-                duration=duration,
-                booking_link=booking_link,
-                session_type=session_type,
-            )
-            create_task(
-                {
-                    "task": "add_dates",
-                    "schedular_project": batch.project.id,
-                    "project_type": "skill_training",
-                    "coaching_session": coaching_session.id,
-                    "priority": "medium",
-                    "status": "pending",
-                    "remarks": [],
-                },
-                7,
-            )
-        elif session_type == "mentoring_session":
-            coaching_session_number = (
-                CoachingSession.objects.filter(
-                    batch=batch, session_type=session_type
-                ).count()
-                + 1
-            )
-
             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
             coaching_session = CoachingSession.objects.create(
                 batch=batch,
@@ -1642,6 +1779,46 @@ def get_batch_calendar(request, batch_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=400)
+
+
+from django.db.models.functions import Concat
+from collections import Counter
+
+
+@api_view(["GET"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
+def get_project_batch_calendar(request, project_id):
+    coaching_sessions = CoachingSession.objects.filter(
+        batch__project__id=project_id
+    ).annotate(
+        unique_key=Concat(
+            F("session_type"),
+            Value("_"),
+            F("coaching_session_number"),
+            output_field=CharField(),
+        )
+    )
+    learners_count = (
+        Learner.objects.filter(schedularbatch__project__id=project_id)
+        .distinct()
+        .count()
+    )
+    coaching_sessions_map = defaultdict(list)
+    for session in coaching_sessions:
+        coaching_sessions_map[session.unique_key].append(session.id)
+
+    count_by_unique_key = Counter()
+    for unique_key, session_ids in coaching_sessions_map.items():
+        count = SchedularSessions.objects.filter(
+            coaching_session__id__in=session_ids
+        ).count()
+        count_by_unique_key[unique_key] = count
+
+    return Response(
+        {"learners_count": learners_count, "sessions_booked_count": count_by_unique_key}
+    )
 
 
 @api_view(["PUT"])
@@ -2438,7 +2615,6 @@ def get_coach_availabilities_booking_link(request):
 
             session_duration = coaching_session.duration
             session_type = coaching_session.session_type
-
             coaches_in_batch = coaching_session.batch.coaches.all()
             start_date = datetime.combine(
                 coaching_session.start_date, datetime.min.time()
@@ -2465,6 +2641,15 @@ def get_coach_availabilities_booking_link(request):
                 if coaching_session_id
                 else None
             )
+
+            language_coaches = {}
+            for coach_instance in coaches_in_batch:
+                for language in coach_instance.language:
+                    if language in language_coaches:
+                        language_coaches[language].append(coach_instance.id)
+                    else:
+                        language_coaches[language] = [coach_instance.id]
+
             return Response(
                 {
                     "project_status": coaching_session.batch.project.status,
@@ -2472,6 +2657,7 @@ def get_coach_availabilities_booking_link(request):
                     "session_duration": session_duration,
                     "session_type": session_type,
                     "coaches": coaches_serializer.data if coaches_serializer else None,
+                    "language_coaches": language_coaches,
                 }
             )
         except Exception as e:
@@ -2651,7 +2837,15 @@ def schedule_session(request):
                     (
                         "Meeraq - Laser Coaching Session Booked"
                         if session_type == "laser_coaching_session"
-                        else "Meeraq - Mentoring Session Booked"
+                        else (
+                            "Meeraq - Mentoring Session Booked"
+                            if session_type == "mentoring_session"
+                            else (
+                                "Meeraq - Action Coaching Booked"
+                                if session_type == "action_coaching_session"
+                                else "Meeraq - Session Booked"
+                            )
+                        )
                     ),
                     {
                         "name": learner.name,
@@ -2661,7 +2855,11 @@ def schedule_session(request):
                         "session_type": (
                             "Mentoring"
                             if session_type == "mentoring_session"
-                            else "Laser Coaching"
+                            else (
+                                "Action Coaching"
+                                if session_type == "action_coaching_session"
+                                else "Laser Coaching"
+                            )
                         ),
                     },
                     [],
@@ -2735,6 +2933,26 @@ def schedule_session_fixed(request):
             request_id = request.data.get("request_id", "")
             request_avail = RequestAvailibilty.objects.get(id=request_id)
             coach = Coach.objects.get(id=coach_id)
+            existing_session_of_coach_at_same_time = SchedularSessions.objects.filter(
+                Q(availibility__coach_id=coach_id),
+                Q(
+                    availibility__start_time__gt=timestamp,
+                    availibility__start_time__lte=end_time,
+                )
+                | Q(
+                    availibility__start_time__lt=timestamp,
+                    availibility__end_time__gte=timestamp,
+                )
+                | Q(availibility__start_time=timestamp)
+                | Q(availibility__end_time=end_time),
+            )
+            if existing_session_of_coach_at_same_time.exists():
+                return Response(
+                    {
+                        "error": "Sorry! This slot has just been booked. Please refresh and try selecting a different time."
+                    },
+                    status=401,
+                )
             if not check_if_selected_slot_can_be_booked(coach_id, timestamp, end_time):
                 return Response(
                     {
@@ -2781,7 +2999,7 @@ def schedule_session_fixed(request):
             batch = coaching_session.batch
             session_type = coaching_session.session_type
 
-            learner = get_object_or_404(Learner, email=participant_email)
+            learner = Learner.objects.get(email=participant_email)
             if learner not in batch.learners.all():
                 return Response(
                     {"error": "Email not found. Please use the registered Email"},
@@ -2876,7 +3094,15 @@ def schedule_session_fixed(request):
                 session_type_value = (
                     "coaching"
                     if session_type == "laser_coaching_session"
-                    else "mentoring"
+                    else (
+                        "mentoring"
+                        if session_type == "mentoring_session"
+                        else (
+                            "action coaching"
+                            if session_type == "action_coaching_session"
+                            else ""
+                        )
+                    )
                 )
                 booking_id = coach_availability.coach.room_id
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
@@ -3001,7 +3227,15 @@ def schedule_session_fixed(request):
                         (
                             "Meeraq - Laser Coaching Session Booked"
                             if session_type == "laser_coaching_session"
-                            else "Meeraq - Mentoring Session Booked"
+                            else (
+                                "Meeraq - Mentoring Session Booked"
+                                if session_type == "mentoring_session"
+                                else (
+                                    "Meeraq - Action Coaching Booked"
+                                    if session_type == "action_coaching_session"
+                                    else "Meeraq - Session Booked"
+                                )
+                            )
                         ),
                         {
                             "name": learner.name,
@@ -3011,7 +3245,11 @@ def schedule_session_fixed(request):
                             "session_type": (
                                 "Mentoring"
                                 if session_type == "mentoring_session"
-                                else "Laser Coaching"
+                                else (
+                                    "Action Coaching"
+                                    if session_type == "action_coaching_session"
+                                    else "Laser Coaching"
+                                )
                             ),
                         },
                         [],
@@ -3022,11 +3260,21 @@ def schedule_session_fixed(request):
                     status=status.HTTP_201_CREATED,
                 )
             else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                print(serializer.errors)
+                return Response(
+                    {"error": f"Failed to book the session."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+    except Learner.DoesNotExist:
+        return Response(
+            {"error": f"Email not found."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     except Exception as e:
         return Response(
-            {"error": f"Failed to book the session. {str(e)}"},
+            {"error": f"Failed to book the session."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -3170,7 +3418,15 @@ def reschedule_session(request, session_id):
                 session_type_value = (
                     "coaching"
                     if session_type == "laser_coaching_session"
-                    else "mentoring"
+                    else (
+                        "mentoring"
+                        if session_type == "mentoring_session"
+                        else (
+                            "action coaching"
+                            if session_type == "action_coaching_session"
+                            else ""
+                        )
+                    )
                 )
 
                 booking_id = coach_availability.coach.room_id
@@ -3281,7 +3537,15 @@ def reschedule_session(request, session_id):
                         (
                             "Meeraq - Laser Coaching Session Booked"
                             if session_type == "laser_coaching_session"
-                            else "Meeraq - Mentoring Session Booked"
+                            else (
+                                "Meeraq - Mentoring Session Booked"
+                                if session_type == "mentoring_session"
+                                else (
+                                    "Meeraq - Action Coaching Booked"
+                                    if session_type == "action_coaching_session"
+                                    else "Meeraq - Session Booked"
+                                )
+                            )
                         ),
                         {
                             "name": learner.name,
@@ -3291,7 +3555,11 @@ def reschedule_session(request, session_id):
                             "session_type": (
                                 "Mentoring"
                                 if session_type == "mentoring_session"
-                                else "Laser Coaching"
+                                else (
+                                    "Action Coaching"
+                                    if session_type == "action_coaching_session"
+                                    else "Laser Coaching"
+                                )
                             ),
                         },
                         [],
@@ -3509,10 +3777,6 @@ def edit_session_status(request, session_id):
         return Response({"error": "Status is required."}, status=400)
     session.status = new_status
     session.save()
-    tasks = Task.objects.filter(
-        task="schedular_update_session_status", status="pending", caas_project=project
-    )
-    tasks.update(status="completed")
     return Response({"message": "Session status updated successfully."}, status=200)
 
 
@@ -3614,7 +3878,7 @@ def get_requests_of_coach(request, coach_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach")])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo")])
 def get_slots_of_request(request, request_id):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -3669,6 +3933,21 @@ def send_unbooked_coaching_session_mail(request):
         )
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def send_unbooked_coaching_session_whatsapp_message(request):
+    try:
+        celery_send_unbooked_coaching_session_whatsapp_message.delay(request.data)
+        return Response(
+            {"message": "Whatsapp message sent to participants."}, status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to send emails."}, status.HTTP_400_BAD_REQUEST
+        )
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
@@ -3697,7 +3976,6 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
             coach__id=coach_id,
             start_time__gte=start_timestamp,
             end_time__lte=end_timestamp,
-            is_confirmed=True,
         )
         coach_availabilities_date_wise[date] = CoachSchedularAvailibiltySerializer(
             coach_availabilities, many=True
@@ -4005,8 +4283,11 @@ def project_batch_wise_report_download(request, project_id, session_to_download)
             elif isinstance(session, CoachingSession):
                 if session.session_type == "laser_coaching_session":
                     session_type_name = "Laser Coaching Session"
-                else:
+                elif session.session_type == "mentoring_session":
                     session_type_name = "Mentoring Session"
+                elif session.session_type == "action_coaching_session":
+                    session_type_name = "Action Coaching Session"
+
                 session_name = f"{session_type_name} {session.coaching_session_number}"
                 attendance = SchedularSessions.objects.filter(
                     coaching_session=session, status="completed"
@@ -4107,6 +4388,8 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
                 session_name = "Laser coaching"
             elif session.session_type == "mentoring_session":
                 session_name = "Mentoring session"
+            elif session.session_type == "action_coaching_session":
+                session_name = "Action Coaching session"
             session_key = f"{session_name} {session.coaching_session_number}"
             if session_key not in dfs:
                 dfs[session_key] = []
@@ -4185,6 +4468,7 @@ def add_facilitator(request):
     fees_per_hour = request.data.get("fees_per_hour", "")
     fees_per_day = request.data.get("fees_per_day", "")
     topic = json.loads(request.data["topic"])
+    remarks = request.data.get("remarks", "")
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
     education_pic = request.data.get("education_pic", None)
@@ -4238,6 +4522,7 @@ def add_facilitator(request):
                 email=email,
                 phone=phone,
                 city=city,
+                remarks=remarks,
                 country=country,
                 phone_country_code=phone_country_code,
                 level=level,
@@ -4303,9 +4588,7 @@ def add_facilitator(request):
 
     except IntegrityError as e:
         print(str(e))
-        return Response(
-            {"error": "A facilitator user with this email already exists."}, status=400
-        )
+        return Response({"error": "Failed to add facilitator."}, status=400)
 
     except Exception as e:
         print(str(e))
@@ -4329,10 +4612,18 @@ def get_facilitators(request):
             )
             overall_nps = calculate_nps_from_answers(overall_answer)
             serializer = FacilitatorSerializer(facilitator)
+            facilitator_contract = FacilitatorContract.objects.filter(
+                facilitator=facilitator
+            ).first()
             all_fac.append(
                 {
                     **serializer.data,
                     "overall_nps": overall_nps,
+                    "facilitator_contract": (
+                        FacilitatorContractSerializerNoDepth(facilitator_contract).data
+                        if facilitator_contract
+                        else None
+                    ),
                 }
             )
         # Serialize the Coach objects
@@ -4716,66 +5007,275 @@ def delete_learner_from_course(request):
 @transaction.atomic
 def edit_schedular_project(request, project_id):
     try:
-        project = SchedularProject.objects.get(pk=project_id)
-    except SchedularProject.DoesNotExist:
+        with transaction.atomic():
+            project = SchedularProject.objects.get(pk=project_id)
+
+            prev_pre_assessment = project.pre_assessment
+            prev_post_assessment = project.post_assessment
+
+            prev_email_reminder = project.email_reminder
+            prev_whatsapp_reminder = project.whatsapp_reminder
+            prev_calendar_invites = project.calendar_invites
+
+            project_details = request.data
+            junior_pmo = None
+            if "junior_pmo" in project_details:
+                junior_pmo = Pmo.objects.filter(
+                    id=project_details["junior_pmo"]
+                ).first()
+
+            project_name = project_details.get("project_name")
+            organisation_id = project_details.get("organisation_id")
+            hr_ids = project_details.get("hr", [])
+            if project_name:
+                project.name = project_name
+            if organisation_id:
+                try:
+                    organisation = Organisation.objects.get(pk=organisation_id)
+                    project.organisation = organisation
+
+                except Organisation.DoesNotExist:
+                    return Response(
+                        {"error": "Organisation not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            # Clear existing HR associations and add the provided ones
+            project.hr.clear()
+            for hr_id in hr_ids:
+                try:
+                    hr = HR.objects.get(pk=hr_id)
+                    project.hr.add(hr)
+                except HR.DoesNotExist:
+                    return Response(
+                        {"error": f"HR with ID {hr_id} not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            project.email_reminder = project_details.get("email_reminder")
+            project.whatsapp_reminder = project_details.get("whatsapp_reminder")
+            project.calendar_invites = project_details.get("calendar_invites")
+            project.nudges = project_details.get("nudges")
+            project.pre_assessment = project_details.get("pre_assessment")
+            project.post_assessment = project_details.get("post_assessment")
+            project.is_finance_enabled = project_details.get("finance")
+            project.junior_pmo = junior_pmo
+            project.teams_enabled = request.data.get("teams_enabled")
+            project.project_type = request.data.get("project_type")
+            project.save()
+
+            pre_assessment = None
+            post_assessment = None
+
+            batches = SchedularBatch.objects.filter(project=project)
+
+            if not prev_pre_assessment == project.pre_assessment:
+                for batch in batches:
+                    course = Course.objects.filter(batch=batch).first()
+                    if course:
+
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+
+                        lesson1 = Lesson.objects.create(
+                            course=course,
+                            name="Pre Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=max_order + 1,
+                        )
+                        assessment1 = AssessmentLesson.objects.create(
+                            lesson=lesson1, type="pre"
+                        )
+                        post_assessment_lesson = AssessmentLesson.objects.filter(
+                            lesson__course=course, type="post"
+                        ).first()
+
+                        pre_assessment = Assessment.objects.create(
+                            name=batch.name + " " + "Pre",
+                            participant_view_name=batch.name + " " + "Pre",
+                            assessment_type="self",
+                            organisation=batch.project.organisation,
+                            assessment_timing="pre",
+                            unique_id=str(uuid.uuid4()),
+                            batch=batch,
+                        )
+                        pre_assessment.hr.set(batch.project.hr.all())
+                        pre_assessment.save()
+                        for learner in batch.learners.all():
+
+                            if pre_assessment.participants_observers.filter(
+                                participant__email=learner.email
+                            ).exists():
+                                continue
+                            new_participant = create_learner(name, learner.email)
+                            if learner.phone:
+                                new_participant.phone = learner.phone
+                            new_participant.save()
+                            mapping = ParticipantObserverMapping.objects.create(
+                                participant=new_participant
+                            )
+                            if learner.phone:
+                                add_contact_in_wati(
+                                    "learner",
+                                    new_participant.name,
+                                    new_participant.phone,
+                                )
+                            unique_id = uuid.uuid4()  # Generate a UUID4
+                            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                            unique_id_instance = ParticipantUniqueId.objects.create(
+                                participant=new_participant,
+                                assessment=pre_assessment,
+                                unique_id=unique_id,
+                            )
+                            mapping.save()
+                            pre_assessment.participants_observers.add(mapping)
+                            pre_assessment.save()
+
+                        if post_assessment_lesson:
+                            pre_assessment.questionnaire = (
+                                post_assessment_lesson.assessment_modal.questionnaire
+                            )
+                            pre_assessment.email_reminder = (
+                                post_assessment_lesson.assessment_modal.email_reminder
+                            )
+                            pre_assessment.whatsapp_reminder = (
+                                post_assessment_lesson.assessment_modal.whatsapp_reminder
+                            )
+
+                            pre_assessment.save()
+
+                            post_assessment_lesson.assessment_modal.pre_assessment = (
+                                pre_assessment
+                            )
+
+                            post_assessment_lesson.assessment_modal.save()
+
+                        assessment1.assessment_modal = pre_assessment
+                        assessment1.save()
+            try:
+                batches = SchedularBatch.objects.filter(project=project)
+
+                for batch in batches:
+
+                    if not prev_email_reminder == project.email_reminder:
+                        batch.email_reminder = project.email_reminder
+
+                    if not prev_whatsapp_reminder == project.whatsapp_reminder:
+                        batch.whatsapp_reminder = project.whatsapp_reminder
+
+                    if not prev_calendar_invites == project.calendar_invites:
+                        batch.calendar_invites = project.calendar_invites
+
+                    batch.save()
+            except Exception as e:
+                print(str(e))
+
+            if not prev_post_assessment == project.post_assessment:
+                for batch in batches:
+                    course = Course.objects.filter(batch=batch).first()
+                    if course:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        lesson1 = Lesson.objects.create(
+                            course=course,
+                            name="Post Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=max_order + 1,
+                        )
+                        assessment1 = AssessmentLesson.objects.create(
+                            lesson=lesson1, type="post"
+                        )
+                        pre_assessment_lesson = AssessmentLesson.objects.filter(
+                            lesson__course=course, type="pre"
+                        ).first()
+                        post_assessment = Assessment.objects.create(
+                            name=batch.name + " " + "Post",
+                            participant_view_name=batch.name + " " + "Post",
+                            assessment_type="self",
+                            organisation=batch.project.organisation,
+                            assessment_timing="post",
+                            unique_id=str(uuid.uuid4()),
+                            batch=batch,
+                        )
+                        post_assessment.hr.set(batch.project.hr.all())
+                        post_assessment.save()
+                        for learner in batch.learners.all():
+
+                            if post_assessment.participants_observers.filter(
+                                participant__email=learner.email
+                            ).exists():
+                                continue
+                            new_participant = create_learner(name, learner.email)
+                            if learner.phone:
+                                new_participant.phone = learner.phone
+                            new_participant.save()
+                            mapping = ParticipantObserverMapping.objects.create(
+                                participant=new_participant
+                            )
+                            if learner.phone:
+                                add_contact_in_wati(
+                                    "learner",
+                                    new_participant.name,
+                                    new_participant.phone,
+                                )
+                            unique_id = uuid.uuid4()  # Generate a UUID4
+                            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                            unique_id_instance = ParticipantUniqueId.objects.create(
+                                participant=new_participant,
+                                assessment=post_assessment,
+                                unique_id=unique_id,
+                            )
+                            mapping.save()
+                            post_assessment.participants_observers.add(mapping)
+                            post_assessment.save()
+
+                        if pre_assessment_lesson:
+                            post_assessment.questionnaire = (
+                                pre_assessment_lesson.assessment_modal.questionnaire
+                            )
+                            post_assessment.email_reminder = (
+                                pre_assessment_lesson.assessment_modal.email_reminder
+                            )
+                            post_assessment.whatsapp_reminder = (
+                                pre_assessment_lesson.assessment_modal.whatsapp_reminder
+                            )
+                            post_assessment.pre_assessment = (
+                                pre_assessment_lesson.assessment_modal
+                            )
+                            post_assessment.save()
+                        assessment1.assessment_modal = post_assessment
+                        assessment1.save()
+
+            if not project.pre_assessment and not project.post_assessment:
+                batches = SchedularBatch.objects.filter(project=project)
+                if batches:
+                    for batch in batches:
+                        course = Course.objects.filter(batch=batch).first()
+                        if course:
+                            lessons = Lesson.objects.filter(course=course)
+                            for lesson in lessons:
+                                if lesson.lesson_type == "assessment":
+                                    lesson.status = "draft"
+                                    lesson.save()
+            return Response(
+                {"message": "Project updated successfully"}, status=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to updated project"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-    project_details = request.data
-    junior_pmo = None
-    if "junior_pmo" in project_details:
-        junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
-
-    project_name = project_details.get("project_name")
-    organisation_id = project_details.get("organisation_id")
-    hr_ids = project_details.get("hr", [])
-    if project_name:
-        project.name = project_name
-    if organisation_id:
-        try:
-            organisation = Organisation.objects.get(pk=organisation_id)
-            project.organisation = organisation
-
-        except Organisation.DoesNotExist:
-            return Response(
-                {"error": "Organisation not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-    # Clear existing HR associations and add the provided ones
-    project.hr.clear()
-    for hr_id in hr_ids:
-        try:
-            hr = HR.objects.get(pk=hr_id)
-            project.hr.add(hr)
-        except HR.DoesNotExist:
-            return Response(
-                {"error": f"HR with ID {hr_id} not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-    project.email_reminder = project_details.get("email_reminder")
-    project.whatsapp_reminder = project_details.get("whatsapp_reminder")
-    project.calendar_invites = project_details.get("calendar_invites")
-    project.nudges = project_details.get("nudges")
-    project.pre_post_assessment = project_details.get("pre_post_assessment")
-    project.is_finance_enabled = project_details.get("finance")
-    project.junior_pmo = junior_pmo
-    project.teams_enabled = request.data.get("teams_enabled")
-    project.project_type = request.data.get("project_type")
-    project.save()
-
-    if not project.pre_post_assessment:
-        batches = SchedularBatch.objects.filter(project=project)
-        if batches:
-            for batch in batches:
-                course = Course.objects.filter(batch=batch).first()
-                if course:
-                    lessons = Lesson.objects.filter(course=course)
-                    for lesson in lessons:
-                        if lesson.lesson_type == "assessment":
-                            lesson.status = "draft"
-                            lesson.save()
-    return Response(
-        {"message": "Project updated successfully"}, status=status.HTTP_200_OK
-    )
 
 
 @api_view(["POST"])
@@ -5119,7 +5619,11 @@ def add_new_session_in_project_structure(request):
                             add_question_to_feedback_lesson(
                                 feedback_lesson, nps_default_feed_questions
                             )
-                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                elif session_type in [
+                    "laser_coaching_session",
+                    "mentoring_session",
+                    "action_coaching_session",
+                ]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
                             batch=batch, session_type=session_type
@@ -5161,6 +5665,8 @@ def add_new_session_in_project_structure(request):
                             session_name = "Laser coaching"
                         elif coaching_session.session_type == "mentoring_session":
                             session_name = "Mentoring session"
+                        elif coaching_session.session_type == "action_coaching_session":
+                            session_name = "Action Coaching Session"
                         new_lesson = Lesson.objects.create(
                             course=course,
                             name=f"{session_name} {coaching_session.coaching_session_number}",
@@ -5308,7 +5814,11 @@ def delete_session_from_project_structure(request):
                             lesson.delete()
                         live_session.delete()
 
-                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                elif session_type in [
+                    "laser_coaching_session",
+                    "mentoring_session",
+                    "action_coaching_session",
+                ]:
                     coaching_session = CoachingSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
                     ).first()
@@ -5399,7 +5909,11 @@ def delete_session_from_project_structure(request):
                                         feedback_lesson.lesson.save()
                                         feedback_lesson.save()
 
-                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                elif session_type in [
+                    "laser_coaching_session",
+                    "mentoring_session",
+                    "action_coaching_session",
+                ]:
                     for lesson in Lesson.objects.filter(
                         course=course, lesson_type="laser_coaching"
                     ):
@@ -5673,6 +6187,7 @@ def delete_coach_from_that_batch(request):
                     if session["session_type"] in [
                         "laser_coaching_session",
                         "mentoring_session",
+                        "action_coaching_session",
                     ]:
                         coaching_session = CoachingSession.objects.filter(
                             batch=batch,
@@ -6329,7 +6844,11 @@ def update_price_in_project_structure(request):
                 if facilitator_pricing:
                     facilitator_pricing.price = price
                     facilitator_pricing.save()
-        elif session_type in ["laser_coaching_session", "mentoring_session"]:
+        elif session_type in [
+            "laser_coaching_session",
+            "mentoring_session",
+            "action_coaching_session",
+        ]:
             coach_pricings = CoachPricing.objects.filter(
                 project_id=project_id, session_type=session_type, order=order
             )
@@ -6591,7 +7110,7 @@ def get_project_wise_progress_data(request, project_id):
                     assessment=post_assessment, participant=participant
                 ).first()
 
-                if project and project.pre_post_assessment:
+                if project and project.pre_assessment:
                     temp["pre_assessment"] = "Yes" if pre_participant_response else "No"
 
                 for session in project.project_structure:
@@ -6621,6 +7140,7 @@ def get_project_wise_progress_data(request, project_id):
                     elif session_type in [
                         "laser_coaching_session",
                         "mentoring_session",
+                        "action_coaching_session",
                     ]:
                         coaching_session = CoachingSession.objects.filter(
                             batch=batch,
@@ -6647,7 +7167,7 @@ def get_project_wise_progress_data(request, project_id):
                         else:
                             temp[f"{session_type} {session['order']}"] = "No"
 
-                if project and project.pre_post_assessment:
+                if project and project.post_assessment:
                     temp["post_assessment"] = (
                         "Yes" if post_participant_response else "No"
                     )
@@ -6737,6 +7257,7 @@ def get_session_progress_data_for_dashboard(request, project_id):
                 elif session_type in [
                     "laser_coaching_session",
                     "mentoring_session",
+                    "action_coaching_session",
                 ]:
                     total_count += 1
                     coaching_session = CoachingSession.objects.filter(
@@ -7792,12 +8313,54 @@ def max_gmsheet_number(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def max_asset_number(request):
+    try:
+        # Get the latest gmsheet_number
+        latest_asset = Assets.objects.latest("created_at")
+
+        latest_number = int(
+            latest_asset.asset_id[3:]
+        )  # Extract the number part and convert to integer
+        next_number = latest_number + 1
+        next_asset_number = (
+            f"NUM{next_number:03}"  # Format the next number to match 'PRO001' format
+        )
+    except Assets.DoesNotExist:
+        # If no GmSheet objects exist, create the first gmsheet_number as 'PRO001'
+        next_asset_number = "NUM001"
+        print(next_asset_number)
+    return JsonResponse({"max_number": next_asset_number})
+
+
+@api_view(["GET"])
+def get_employees(request):
+    try:
+        employees = Employee.objects.all()
+        serializer = EmployeeSerializer(employees, many=True)
+        return JsonResponse(serializer.data, safe=False)
+    except ObjectDoesNotExist:
+        return JsonResponse({"error": "Employees not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+def create_employee(request):
+    serializer = EmployeeSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_gmsheet_by_sales(request, sales_person_id):
     try:
         gmsheet = GmSheet.objects.filter(sales__id=sales_person_id).order_by(
             "-created_at"
         )
-        serializer = GmSheetSerializer(gmsheet, many=True)
+        serializer = GmSheetSalesOrderExistsSerializer(gmsheet, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -7805,6 +8368,49 @@ def get_gmsheet_by_sales(request, sales_person_id):
             {"error": "Failed to get GM Sheets for the specified salesperson."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_employee(request):
+    employee_id = request.data.get("id")
+    if not employee_id:
+        return Response(
+            {"error": "Employee ID is required."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response(
+            {"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = EmployeeSerializer(employee, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_employee(request):
+    employee_id = request.data.get("id")
+    if not employee_id:
+        return Response(
+            {"error": "Employee ID is required."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response(
+            {"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    employee.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["DELETE"])
@@ -7952,6 +8558,27 @@ def edit_action_item(request, pk):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def add_remark_to_action_item(request, pk):
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "PUT":
+        remark = request.data.get("remark")
+        if not remark:
+            return Response(
+                {"error": "No remark found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        action_item.remarks.append({"text": remark, "created_at": str(timezone.now())})
+        action_item.save()
+        serializer = ActionItemSerializer(action_item)
+        return Response(serializer.data)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_action_item_status(request, pk):
     try:
         action_item = ActionItem.objects.get(pk=pk)
@@ -8058,6 +8685,17 @@ def learner_action_items_in_batch(request, batch_id, learner_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def learner_action_items_in_session(request, session_id):
+    session = SchedularSessions.objects.get(id=session_id)
+    action_items = ActionItem.objects.filter(
+        batch__id=session.coaching_session.batch.id, learner__id=session.learner.id
+    ).order_by("-created_at")
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def action_items_in_batch(request, batch_id):
     action_items = ActionItem.objects.filter(batch__id=batch_id).order_by("-created_at")
     action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
@@ -8089,14 +8727,13 @@ MOVEMENT_TYPES = {
     4: "Excellent Movement",
 }
 
-STATUS_LABELS =  {
-    'not_started': 'Not Started',
-    'occasionally_doing': 'Occasionally Doing',
-    'regularly_doing': 'Regularly Doing',
-    'actively_pursuing': 'Actively Pursuing',
-    'consistently_achieving': 'Consistently Achieving'
+STATUS_LABELS = {
+    "not_started": "Not Started",
+    "occasionally_doing": "Occasionally Doing",
+    "regularly_doing": "Regularly Doing",
+    "actively_pursuing": "Actively Pursuing",
+    "consistently_achieving": "Consistently Achieving",
 }
-
 
 
 @api_view(["GET"])
@@ -8443,13 +9080,18 @@ def batch_competency_movement(request, batch_id, competency_id):
     behavior_names = {behavior.name: behavior.id for behavior in competency_behaviors}
 
     # Initialize a dictionary to store counts for each behavior in each status
-    behavior_status_counts = {behavior_name: {status[0]: 0 for status in STATUS_CHOICES} for behavior_name in behavior_names}
+    behavior_status_counts = {
+        behavior_name: {status[0]: 0 for status in STATUS_CHOICES}
+        for behavior_name in behavior_names
+    }
 
     # Fetch status counts for each behavior from the database
     for behavior_name, behavior_id in behavior_names.items():
         status_counts_queryset = (
             ActionItem.objects.filter(
-                batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+                batch__id=batch_id,
+                competency__id=competency_id,
+                behavior__id=behavior_id,
             )
             .values("current_status")
             .annotate(count=Count("id"))
@@ -8457,15 +9099,236 @@ def batch_competency_movement(request, batch_id, competency_id):
 
         # Update counts for existing statuses for the current behavior
         for item in status_counts_queryset:
-            behavior_status_counts[behavior_name][item["current_status"]] = item["count"]
+            behavior_status_counts[behavior_name][item["current_status"]] = item[
+                "count"
+            ]
 
     # Prepare data for response
     action_item_counts = [
         {
             "status": STATUS_LABELS[status],
-            **{behavior_name: counts[status] for behavior_name, counts in behavior_status_counts.items()}
+            **{
+                behavior_name: counts[status]
+                for behavior_name, counts in behavior_status_counts.items()
+            },
         }
         for status, _ in STATUS_CHOICES
     ]
 
-    return Response({"action_item_movement":  data ,  "action_item_counts" : action_item_counts })
+    return Response(
+        {"action_item_movement": data, "action_item_counts": action_item_counts}
+    )
+
+
+def find_conflicting_sessions():
+    coach_conflicts = defaultdict(list)
+    current_time = timezone.now()
+    current_timestamp_ms = int(current_time.timestamp() * 1000)
+    upcoming_sessions = SchedularSessions.objects.filter(
+        availibility__start_time__gte=current_timestamp_ms
+    )
+    for session in upcoming_sessions:
+        coach_id = session.availibility.coach_id
+        start_time = session.availibility.start_time
+        end_time = session.availibility.end_time
+        session_id = session.id
+        conflicting_sessions = SchedularSessions.objects.filter(
+            Q(availibility__coach_id=coach_id),
+            Q(
+                availibility__start_time__gt=start_time,
+                availibility__start_time__lte=end_time,
+            )
+            | Q(
+                availibility__start_time__lt=start_time,
+                availibility__end_time__gte=start_time,
+            )
+            | Q(availibility__start_time=start_time)
+            | Q(availibility__end_time=end_time),
+        ).exclude(
+            id=session_id
+        )  # Exclude the current session itself
+        for conflicting_session in conflicting_sessions:
+            conflicting_session_id = conflicting_session.id
+            # Ensure only one of the conflicting pairs is added
+            if (
+                conflicting_session_id not in coach_conflicts
+                or session_id < conflicting_session_id
+            ):
+                coach_conflicts[session_id].append(conflicting_session_id)
+    result = []
+    for session_id, conflicts in coach_conflicts.items():
+        session_obj = SchedularSessions.objects.get(id=session_id)
+        session_coach_name = (
+            session_obj.availibility.coach.first_name
+            + " "
+            + session_obj.availibility.coach.last_name
+        )
+        session_start_time = session_obj.availibility.start_time
+        session_end_time = session_obj.availibility.end_time
+        session_learner_name = session_obj.learner.name
+        session_learner_email = session_obj.learner.email
+        project_names = [session_obj.coaching_session.batch.project.name]
+        session_details = {
+            "id": session_id,
+            "coach": session_coach_name.title(),
+            "coach_email": session_obj.availibility.coach.email,
+            "start_time": session_start_time,
+            "end_time": session_end_time,
+            "sessions": [
+                {
+                    "learner_name": session_learner_name,
+                    "learner_email": session_learner_email,
+                    "start_time": session_start_time,
+                    "end_time": session_end_time,
+                }
+            ],
+            "project_names": project_names,
+        }
+        for conflict_id in conflicts:
+            conflict_obj = SchedularSessions.objects.get(id=conflict_id)
+            conflict_start_time = conflict_obj.availibility.start_time
+            conflict_end_time = conflict_obj.availibility.end_time
+            conflict_learner_name = conflict_obj.learner.name
+            conflict_learner_email = conflict_obj.learner.email
+            project_name = conflict_obj.coaching_session.batch.project.name
+            conflict_details = {
+                "learner_name": conflict_learner_name,
+                "learner_email": conflict_learner_email,
+                "start_time": conflict_start_time,
+                "end_time": conflict_end_time,
+            }
+            session_details["sessions"].append(conflict_details)
+            session_details["project_names"].append(project_name)
+        result.append(session_details)
+    return result
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_conflicting_sessions(request):
+    res = find_conflicting_sessions()
+    return Response(res)
+
+
+def calculate_date_range(d1, d2, interval):
+    if not d1 or not d2:
+        return []
+
+    date_range = []
+    current_date = d1
+    while current_date <= d2:
+        date_range.append(current_date)
+        current_date += timedelta(days=interval)
+    return date_range
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def new_graph(request, batch_id, competency_id, behavior_id):
+    # Get interval from query parameters
+    interval = int(request.query_params.get("interval", 1))
+    # Retrieve d1 from the first created action item
+    first_created_action_item = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .order_by("created_at")
+        .first()
+    )
+    d1 = (
+        first_created_action_item.created_at.date()
+        if first_created_action_item
+        else None
+    )
+    # Retrieve d2 from the last updated action item
+    last_updated_action_item = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+    d2 = (
+        last_updated_action_item.updated_at.date() if last_updated_action_item else None
+    )
+    # Calculate date range based on interval
+    date_range = calculate_date_range(d1, d2, interval)
+    graph_data = [{"date": date.strftime("%d/%m/%y")} for date in date_range]
+    last_index = len(date_range) - 1
+    # outer loop
+    for outer_index, date in enumerate(date_range):
+        if outer_index < last_index:
+            filtered_action_items = ActionItem.objects.filter(
+                batch__id=batch_id,
+                competency__id=competency_id,
+                behavior__id=behavior_id,
+                created_at__gte=date,
+                created_at__lte=date_range[outer_index + 1],
+            )
+            for inner_index in range(outer_index, len(graph_data)):
+                movements = []
+                for action_item in filtered_action_items:
+                    movement = 0
+                    initial_status = action_item.initial_status
+                    latest_status = None
+                    for update in action_item.status_updates:
+                        update_date = datetime.strptime(
+                            update["updated_at"], "%Y-%m-%d %H:%M:%S.%f+00:00"
+                        ).date()
+                        if update_date <= date_range[inner_index]:
+                            latest_status = update["status"]
+                        else:
+                            break  # Break the loop if update date is after the mapped date
+                    if latest_status:
+                        movement = (
+                            status_choices_dict[latest_status]
+                            - status_choices_dict[initial_status]
+                        )
+                        movements.append(movement)
+                average = (
+                    round((sum(movements) / len(movements)) / 4 * 100, 0)
+                    if movements
+                    else 0
+                )
+                if inner_index == outer_index:
+                    graph_data[inner_index][
+                        f"{filtered_action_items.count()} Actions created on "
+                        + (date_range[outer_index]).strftime("%d/%m/%y")
+                    ] = 0
+                if (inner_index + 1) <= last_index:
+                    graph_data[inner_index + 1][
+                        f"{filtered_action_items.count()} Actions created on "
+                        + (date_range[outer_index]).strftime("%d/%m/%y")
+                    ] = average
+    return Response({"graph_data": graph_data})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def get_booking_id_of_session(request):
+    coaching_session_order = request.data.get("coaching_session_order")
+    project_id = request.data.get("project_id")
+    email = request.data.get("email")
+    schedular_batches = SchedularBatch.objects.filter(
+        learners__email=email, project__unique_id=project_id
+    )
+    if schedular_batches.exists():
+        print(
+            coaching_session_order,
+            type(coaching_session_order),
+            schedular_batches.first(),
+        )
+        coaching_sessions = CoachingSession.objects.filter(
+            order=coaching_session_order, batch=schedular_batches.first()
+        )
+        if coaching_sessions.exists():
+            booking_link = coaching_sessions.first().booking_link
+            splitted_link = booking_link.split("/")
+            return Response({"booking_unique_id": splitted_link[-1], "email": email})
+        return Response(
+            {"error": "Failed to verify the user."}, status=status.HTTP_400_BAD_REQUEST
+        )
+    else:
+        return Response(
+            {"error": "Failed to verify the user."}, status=status.HTTP_400_BAD_REQUEST
+        )

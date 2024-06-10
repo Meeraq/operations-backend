@@ -2,6 +2,7 @@ from django.db import models
 from api.models import Learner, Profile, Organisation, HR
 from schedularApi.models import SchedularBatch
 from django.contrib.auth.models import User
+from api.models import Project
 
 # Create your models here.
 
@@ -153,7 +154,7 @@ class Assessment(models.Model):
     assessment_start_date = models.CharField(max_length=255, blank=True)
     assessment_end_date = models.CharField(max_length=255, blank=True)
     questionnaire = models.ForeignKey(
-        Questionnaire, on_delete=models.CASCADE, blank=True
+        Questionnaire, on_delete=models.CASCADE, blank=True, null=True
     )
     descriptive_questions = models.JSONField(default=list, blank=True)
     participants_observers = models.ManyToManyField(
@@ -177,6 +178,7 @@ class Assessment(models.Model):
     batch = models.ForeignKey(
         SchedularBatch, on_delete=models.CASCADE, blank=True, null=True
     )
+    automated_result = models.BooleanField(blank=True, default=False)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -197,11 +199,40 @@ class ParticipantResponse(models.Model):
         )
 
 
+class ParticipantTempResponse(models.Model):
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
+    temp_participant_response = models.JSONField(default=dict, blank=True)
+    active_question = models.IntegerField(blank=True, default=0, null=True)
+    current_competency = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return (
+            f"Response for {self.participant.name} in Assessment {self.assessment.name}"
+        )
+
+
 class ObserverResponse(models.Model):
     participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
     observer = models.ForeignKey(Observer, on_delete=models.CASCADE, blank=True)
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
     observer_response = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Response for Observer {self.observer.name} in Assessment {self.assessment.name} participant is {self.participant.name}"
+
+
+class ObserverTempResponse(models.Model):
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
+    observer = models.ForeignKey(Observer, on_delete=models.CASCADE, blank=True)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
+    temp_observer_response = models.JSONField(default=dict, blank=True)
+    active_question = models.IntegerField(blank=True, default=0, null=True)
+    current_competency = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -279,6 +310,7 @@ class ActionItem(models.Model):
     behavior = models.ForeignKey(
         Behavior, on_delete=models.SET_NULL, null=True, blank=True, default=None
     )
+    remarks = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -295,3 +327,10 @@ class BatchCompetencyAssignment(models.Model):
 
     def __str__(self):
         return f"{self.batch.name} - {self.competency.name}"
+
+
+class ProjectAssessmentMapping(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    assessments = models.ManyToManyField(Assessment, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)

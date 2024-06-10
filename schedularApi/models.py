@@ -17,6 +17,7 @@ from api.models import (
 )
 from django.utils import timezone
 from django.contrib.auth.models import User
+from datetime import datetime
 
 
 # Create your models here.
@@ -30,6 +31,7 @@ class SchedularProject(models.Model):
         ("skill_training", "Skill Training"),
         ("assessment", "Assessment"),
     ]
+    unique_id = models.CharField(max_length=225, default="", blank=True, null=True)
     name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
@@ -41,7 +43,8 @@ class SchedularProject(models.Model):
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
     nudges = models.BooleanField(blank=True, default=True)
-    pre_post_assessment = models.BooleanField(blank=True, default=True)
+    pre_assessment = models.BooleanField(blank=True, default=True)
+    post_assessment = models.BooleanField(blank=True, default=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     email_reminder = models.BooleanField(blank=True, default=True)
     whatsapp_reminder = models.BooleanField(blank=True, default=True)
@@ -116,6 +119,7 @@ class CoachingSession(models.Model):
     SESSION_CHOICES = [
         ("laser_coaching_session", "Laser Coaching Session"),
         ("mentoring_session", "Mentoring Session"),
+        ("action_coaching_session", "Action Coaching Session")
     ]
     booking_link = models.CharField(max_length=500, blank=True, default="")
     start_date = models.DateField(blank=True, null=True)
@@ -282,10 +286,39 @@ class CoachContract(models.Model):
         return f"{self.coach.first_name}'s Contract for {self.project.name if self.project else self.schedular_project.name}"
 
 
+class FacilitatorContract(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    project_contract = models.ForeignKey(
+        ProjectContract, on_delete=models.CASCADE, blank=True
+    )
+    name_inputed = models.CharField(max_length=100, blank=True)
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, blank=True, null=True
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.CASCADE, blank=True, null=True
+    )
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
+    )
+    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE)
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+
+    def __str__(self):
+        return f"{self.facilitator.first_name} {self.facilitator.last_name} Contract"
+
 class CoachPricing(models.Model):
     SESSION_CHOICES = [
         ("laser_coaching_session", "Laser Coaching Session"),
         ("mentoring_session", "Mentoring Session"),
+        ("action_coaching_session", "Action Coaching Session")
     ]
 
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
@@ -355,7 +388,15 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.name}"
+    
+class Employee(models.Model):
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30)
+    phone_number = models.CharField(max_length=15)
+    email = models.EmailField(unique=True)
 
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
 
 class Assets(models.Model):
     STATUS_CHOICES = [
@@ -364,29 +405,27 @@ class Assets(models.Model):
         ("lost", "Lost"),
         ("damaged", "Damaged"),
     ]
+    asset_id = models.CharField(max_length=10, blank=True, null=True)
     name = models.CharField(max_length=255, default="", blank=True)
     category = models.CharField(max_length=255, default="", blank=True)
-    assigned_to = models.CharField(max_length=255, default="", blank=True)
+    assigned_to = models.ForeignKey(Employee, on_delete=models.SET_NULL, blank=True, null=True)
     update_at = models.DateTimeField(auto_now=True)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True,max_length=255)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
     updates = models.JSONField(default=list, blank=True)
-
-
-class Benchmark(models.Model):
-    year = models.CharField(max_length=9, blank=True, null=True)
-    caas_benchmark = models.CharField(max_length=3, blank=True, null=True)
-    seeq_benchmark = models.CharField(max_length=3, blank=True, null=True)
-    both_benchmark = models.CharField(max_length=3, blank=True, null=True)
+    serial_number =models.CharField(max_length=255, default="", blank=True)
+    asset_location = models.CharField(max_length=255,default="", blank=True )
+    purchase_date = models.DateTimeField(null=True, blank=True)
+    due_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-
+class Benchmark(models.Model):
+    year = models.CharField(max_length=9, default=str(datetime.now().year))
+    project_type = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)  # Add the updated_at field
+    
 class GmSheet(models.Model):
-    PROJECT_TYPE_CHOICES = [
-        ("CAAS", "CAAS"),
-        ("SEEQ", "Skill Training"),
-        ("Coaching + Traning", "Coaching+Training"),
-    ]
     DEAL_STATUS_CHOICES = [
         ("pending", "Pending"),
         ("won", "Won"),
@@ -427,6 +466,8 @@ class Offering(models.Model):
     revenue_structure = models.JSONField(default=list, blank=True, null=True)
     cost_structure = models.JSONField(default=list, blank=True, null=True)
     gross_margin = models.CharField(max_length=100, blank=True, null=True)
+    is_won = models.BooleanField(default=False)
+    total_profit = models.CharField(max_length=100, blank=True, null=True)
 
 
 class HandoverDetails(models.Model):
@@ -502,7 +543,8 @@ class HandoverDetails(models.Model):
     # sales_order_nos = models.JSONField(default=list, blank=True, null=True)
     total_coaching_hours = models.IntegerField(default=0, blank=True, null=True)
     tentative_start_date = models.DateField(blank=True, null=True)
-    pre_post_assessment = models.BooleanField(blank=True, default=True)
+    pre_assessment = models.BooleanField(blank=True, default=True)
+    post_assessment = models.BooleanField(blank=True, default=True)
     nudges = models.BooleanField(blank=True, default=True)
     end_of_program_certification = models.BooleanField(default=False, blank=True)
     out_of_pocket_expenses = models.TextField(blank=True, null=True)

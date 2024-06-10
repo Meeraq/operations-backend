@@ -23,7 +23,10 @@ from .models import (
     AssessmentNotification,
     ParticipantUniqueId,
     ParticipantReleasedResults,
-    BatchCompetencyAssignment
+    BatchCompetencyAssignment,
+    ProjectAssessmentMapping,
+    ObserverTempResponse,
+    ParticipantTempResponse,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -43,8 +46,8 @@ from .serializers import (
     ParticipantReleasedResultsSerializerDepthOne,
     ParticipantObserverMappingSerializerDepthOne,
     BatchCompetencyAssignmentSerializer,
-    BatchCompetencyAssignmentDepthOneSerializer
-
+    BatchCompetencyAssignmentDepthOneSerializer,
+    ProjectAssessmentMappingSerializerDepthOne,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -52,7 +55,17 @@ import string
 import random
 import pandas as pd
 from django.contrib.auth.models import User
-from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role, Pmo
+from api.models import (
+    Profile,
+    Learner,
+    Organisation,
+    HR,
+    SentEmailActivity,
+    Role,
+    Pmo,
+    Project,
+    Engagement,
+)
 from api.serializers import OrganisationSerializer
 from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
@@ -80,11 +93,18 @@ from time import sleep
 from django.http import HttpResponse
 from datetime import datetime
 import io
-from api.views import add_contact_in_wati
+from api.views import add_contact_in_wati, create_learner
 from schedularApi.tasks import (
     send_assessment_invitation_mail,
     send_whatsapp_message,
     send_assessment_invitation_mail_on_click,
+    send_email_reminder_assessment_on_click,
+    send_whatsapp_reminder_assessment_on_click,
+    result_sending,
+    generate_graph_for_participant,
+    generate_graph_for_participant_for_post_assessment,
+    generate_graph_for_pre_assessment,
+    generate_graph_for_pre_post_assessment,
 )
 from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -192,56 +212,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 
 
 from django.core.exceptions import ObjectDoesNotExist
-
-
-def create_learner(learner_name, learner_email):
-    try:
-        with transaction.atomic():
-            if not learner_email:
-                raise ValueError("Username field is required")
-
-            user = User.objects.filter(username=learner_email).first()
-            learner = None
-            if user:
-                learner = Learner.objects.filter(user__user=user).first()
-                if learner:
-                    profile = Profile.objects.get(user=user)
-                    learner_role, created = Role.objects.get_or_create(name="learner")
-                    profile.roles.add(learner_role)
-                    learner.name = learner_name.strip().title()
-                    learner.save()
-                    return learner
-                else:
-                    profile = Profile.objects.get(user=user)
-            else:
-                temp_password = "".join(
-                    random.choices(
-                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
-                        k=8,
-                    )
-                )
-                user = User.objects.create_user(
-                    username=learner_email,
-                    password=temp_password,
-                    email=learner_email,
-                )
-
-                user.save()
-                profile = Profile.objects.create(user=user)
-            learner_role, created = Role.objects.get_or_create(name="learner")
-            profile.roles.add(learner_role)
-            profile.save()
-            learner = Learner.objects.create(
-                user=profile,
-                name=learner_name.strip().title(),
-                email=learner_email,
-            )
-            return learner
-    except ValueError as e:
-        raise ValueError(str(e))
-
-    except Exception as e:
-        raise Exception(str(e))
 
 
 class CompetencyView(APIView):
@@ -523,26 +493,56 @@ class OneQuestionnaireDetail(APIView):
         return Response(serializer.data)
 
 
-def create_pre_post_assessments(request):
+def create_pre_post_assessments(request, project=None):
     try:
-        pre_assessment_serializer = AssessmentSerializer(
-            data=request.data["pre_assessment_data"]
-        )
-        post_assessment_serializer = AssessmentSerializer(
-            data=request.data["post_assessment_data"]
-        )
-        if (
-            pre_assessment_serializer.is_valid()
-            and post_assessment_serializer.is_valid()
-        ):
-            pre_assessment = pre_assessment_serializer.save()
-            post_assessment = post_assessment_serializer.save()
-            post_assessment.pre_assessment = pre_assessment
-            post_assessment.save()
+        if project:
+            pre_assessment_serializer = None
+            if project.pre_assessment:
+                pre_assessment_serializer = AssessmentSerializer(
+                    data=request.data["pre_assessment_data"]
+                )
+            post_assessment_serializer = None
+            if project.post_assessment:
+                post_assessment_serializer = AssessmentSerializer(
+                    data=request.data["post_assessment_data"]
+                )
 
-            return True, pre_assessment.id, post_assessment.id
+            pre_assessment = None
+            if pre_assessment_serializer and pre_assessment_serializer.is_valid():
+                pre_assessment = pre_assessment_serializer.save()
+
+            post_assessment = None
+            if post_assessment_serializer and post_assessment_serializer.is_valid():
+                post_assessment = post_assessment_serializer.save()
+                post_assessment.pre_assessment = pre_assessment
+                post_assessment.save()
+
+            return (
+                True,
+                pre_assessment.id if pre_assessment else None,
+                post_assessment.id if post_assessment else None,
+            )
+        else:
+
+            pre_assessment_serializer = AssessmentSerializer(
+                data=request.data["pre_assessment_data"]
+            )
+            post_assessment_serializer = AssessmentSerializer(
+                data=request.data["post_assessment_data"]
+            )
+            if (
+                pre_assessment_serializer.is_valid()
+                and post_assessment_serializer.is_valid()
+            ):
+                pre_assessment = pre_assessment_serializer.save()
+                post_assessment = post_assessment_serializer.save()
+                post_assessment.pre_assessment = pre_assessment
+                post_assessment.save()
+
+                return True, pre_assessment.id, post_assessment.id
         return False, None, None
     except Exception as e:
+        print(str(e))
         return False, None, None
 
 
@@ -1155,7 +1155,51 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
-            serializer = AssessmentAnsweredSerializerDepthFour(assessment)
+            try:
+                if assessment.assessment_type == "self" and assessment.automated_result:
+                    encoded_image = None
+                    compentency_with_description = None
+                    if (
+                        assessment.assessment_timing == "pre"
+                        or assessment.assessment_timing == "none"
+                    ):
+                        (
+                            encoded_image,
+                            compentency_with_description,
+                        ) = generate_graph_for_participant(
+                            participant, assessment_id, assessment
+                        )
+                    elif assessment.assessment_timing == "post":
+                        (
+                            encoded_image,
+                            compentency_with_description,
+                        ) = generate_graph_for_participant_for_post_assessment(
+                            participant, assessment_id, assessment
+                        )
+                    send_mail_templates(
+                        "assessment/air_india_report_mail.html",
+                        [participant.email],
+                        "Meeraq Assessment Report",
+                        {
+                            "name": participant.name.title(),
+                            "image_base64": encoded_image,
+                            "compentency_with_description": compentency_with_description,
+                            "assessment_timing": assessment.assessment_timing,
+                            "assessment_name": assessment.participant_view_name,
+                        },
+                        [],
+                    )
+                    (
+                        participant_released_results,
+                        created,
+                    ) = ParticipantReleasedResults.objects.get_or_create(
+                        assessment=assessment
+                    )
+                    participant_released_results.participants.add(participant)
+                    participant_released_results.save()
+            except Exception as e:
+                print(str(e))
+
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -2157,6 +2201,74 @@ def add_multiple_participants(participant, assessment_id, assessment, name_seper
     return serializer
 
 
+def add_multiple_participants_for_project(
+    participant, assessment_id, assessment, name_seperated, project
+):
+    if assessment.participants_observers.filter(
+        participant__email=participant["email"]
+    ).exists():
+        return Response(
+            {
+                "error": f"Participant with email {participant['email']} already exists in the assessment."
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    name = None
+    if name_seperated:
+        name = (
+            participant["first_name"].capitalize()
+            + " "
+            + participant.get("last_name", "").capitalize()
+        )
+    else:
+        name = participant["name"]
+    new_participant = create_learner(name, participant["email"])
+    if participant["phone"]:
+        new_participant.phone = participant["phone"]
+    new_participant.save()
+    mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+    if participant["phone"]:
+        add_contact_in_wati("learner", new_participant.name, new_participant.phone)
+    unique_id = uuid.uuid4()  # Generate a UUID4
+    # Creating a ParticipantUniqueId instance with a UUID as unique_id
+    unique_id_instance = ParticipantUniqueId.objects.create(
+        participant=new_participant,
+        assessment=assessment,
+        unique_id=unique_id,
+    )
+    mapping.save()
+    assessment.participants_observers.add(mapping)
+    assessment.save()
+    particpant_data = [{"name": name, "email": participant["email"]}]
+    # send_reset_password_link(particpant_data)
+    if assessment.assessment_timing == "pre" and project.post_assessment:
+        post_assessment = Assessment.objects.filter(pre_assessment=assessment).first()
+        mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+        mapping.save()
+        post_assessment.participants_observers.add(mapping)
+        post_assessment.save()
+        post_unique_id = uuid.uuid4()
+        post_unique_id_instance = ParticipantUniqueId.objects.create(
+            participant=new_participant,
+            assessment=post_assessment,
+            unique_id=post_unique_id,
+        )
+    elif assessment.assessment_timing == "post" and project.pre_assessment:
+        pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
+        mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+        mapping.save()
+        pre_assessment.participants_observers.add(mapping)
+        pre_assessment.save()
+        pre_unique_id = uuid.uuid4()
+        pre_unique_id_instance = ParticipantUniqueId.objects.create(
+            participant=new_participant,
+            assessment=pre_assessment,
+            unique_id=pre_unique_id,
+        )
+    serializer = AssessmentSerializerDepthFour(assessment)
+    return serializer
+
+
 class AddMultipleParticipants(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
@@ -2302,13 +2414,13 @@ def generate_graph(data, assessment_type):
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
-    num_graphs = int(np.ceil(num_competencies / 7.0))
+    num_graphs = int(np.ceil(num_competencies / 11.0))
 
     encoded_images = []  # Array to store base64 encoded images
 
     for i in range(num_graphs):
-        start_index = i * 7
-        end_index = min((i + 1) * 7, num_competencies)
+        start_index = i * 11
+        end_index = min((i + 1) * 11, num_competencies)
         subset_data = data[start_index:end_index]
 
         fig, ax = plt.subplots(figsize=(13, 6))
@@ -2634,13 +2746,13 @@ def convert_numeric_values_to_int(data):
     new_data = []
     for item in data:
         new_item = item.copy()
-        new_item['questions'] = []
-        for question in item.get('questions', []):
+        new_item["questions"] = []
+        for question in item.get("questions", []):
             new_question = question.copy()
             for key, value in new_question.items():
                 if isinstance(value, (int, float)):
                     new_question[key] = int(value)
-            new_item['questions'].append(new_question)
+            new_item["questions"].append(new_question)
         new_data.append(new_item)
     return new_data
 
@@ -2763,7 +2875,7 @@ class DownloadParticipantResultReport(APIView):
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            
+
             if assessment.number_of_observers == 1:
                 question_with_answers = convert_numeric_values_to_int(
                     question_with_answers
@@ -2928,12 +3040,12 @@ class DownloadParticipantResultReport(APIView):
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            
+
             if assessment.number_of_observers == 1:
                 question_with_answers = convert_numeric_values_to_int(
                     question_with_answers
                 )
-            
+
             data_for_score_analysis = get_data_for_score_analysis(
                 question_with_answers, assessment
             )
@@ -3295,63 +3407,6 @@ def swap_positions(length):
     return swapped_dict
 
 
-def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp):
-    comp_labels = list(competency_percentage.keys())
-    percentage_values = list(competency_percentage.values())
-    colors1 = ["#eb0081", "#d1cdcd"]
-    colors2 = ["#b91689", "#d1cdcd"]
-    colors3 = ["#7a3191", "#d1cdcd"]
-    colors4 = ["#374e9c", "#d1cdcd"]
-
-    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
-    ax = fig.add_subplot(111)
-
-    bottom = np.zeros(len(comp_labels))
-    bar_positions = np.arange(len(comp_labels))
-    for i in range(len(comp_labels)):
-        color_index = i % 4  # Use modulo to repeat colors after every four bars
-
-        if color_index == 0:
-            color = colors1
-        elif color_index == 1:
-            color = colors2
-        elif color_index == 2:
-            color = colors3
-        else:
-            color = colors4
-
-        ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
-
-    for index, value in enumerate(percentage_values):
-        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index],
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
-        )
-    ax.set_yticks(bar_positions)
-    ax.set_yticklabels(
-        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-        fontweight="bold",
-        fontsize=14,
-    )
-    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-    plt.xlim(0, 100)
-    plt.xlabel("Percentage")
-    plt.tight_layout()
-
-    image_stream = io.BytesIO()
-    plt.savefig(image_stream, format="png")
-    plt.close()
-
-    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
-
-    return encoded_image
-
-
 def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each_comp):
     comp_labels = list(competency_percentage.keys())
     percentage_values = list(competency_percentage.values())
@@ -3406,82 +3461,6 @@ def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each
 
     # Adjust layout for better visibility and centering
     plt.subplots_adjust(left=0.15, right=0.85, top=0.9, bottom=0.1)
-
-    image_stream = io.BytesIO()
-    plt.savefig(image_stream, format="png")
-    plt.close()
-
-    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
-
-    return encoded_image
-
-
-def generate_graph_for_pre_post_assessment(
-    pre_competency_percentage, competency_percentage, total_for_each_comp
-):
-    comp_labels = list(competency_percentage.keys())
-    pre_percentage_values = list(pre_competency_percentage.values())
-    post_percentage_values = list(competency_percentage.values())
-
-    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
-    ax = fig.add_subplot(111)
-
-    width = 0.4  # Width of each bar
-    bar_positions = np.arange(len(comp_labels))
-
-    # Plot pre-assessment values
-    pre_bars = ax.barh(
-        bar_positions - width / 2,
-        pre_percentage_values,
-        height=width,
-        label="Pre-Assessment",
-        color="#eb0081",
-    )
-
-    # Plot post-assessment values
-    post_bars = ax.barh(
-        bar_positions + width / 2,
-        post_percentage_values,
-        height=width,
-        label="Post-Assessment",
-        color="#374e9c",
-    )
-
-    ax.set_yticks(bar_positions)
-    ax.set_yticklabels(comp_labels)
-    ax.legend()
-    ax.set_yticklabels(
-        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-        fontweight="bold",
-    )
-    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-    plt.xlabel("Percentage")
-    plt.xlim(0, 100)
-    plt.tight_layout()
-
-    # Add numbers on top of the pre-assessment bars
-    for index, value in enumerate(pre_percentage_values):
-        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index] - width / 2,
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
-        )
-
-    # Add numbers on top of the post-assessment bars
-    for index, value in enumerate(post_percentage_values):
-        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index] + width / 2,
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
-        )
 
     image_stream = io.BytesIO()
     plt.savefig(image_stream, format="png")
@@ -3570,233 +3549,6 @@ def generate_spider_web_for_pre_post_assessment(
     return encoded_image
 
 
-def generate_graph_for_participant(
-    participant, assessment_id, assessment, project_wise=False
-):
-    participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment_id
-    ).first()
-
-    if participant_response:
-        total_for_each_comp = {}
-        compentency_with_description = []
-
-        for competency in assessment.questionnaire.questions.values(
-            "competency"
-        ).distinct():
-            competency_id = competency["competency"]
-
-            competency_name_for_object = Competency.objects.get(id=competency_id).name
-            competency_description_for_object = Competency.objects.get(
-                id=competency_id
-            ).description
-            competency_object = {
-                "competency_name": competency_name_for_object,
-                "competency_description": competency_description_for_object,
-            }
-            compentency_with_description.append(competency_object)
-
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in total_for_each_comp:
-                total_for_each_comp[question.competency.name] = 1
-            else:
-                total_for_each_comp[question.competency.name] += 1
-
-        competency_object = {}
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in competency_object:
-                competency_object[question.competency.name] = 0
-
-            participant_response_value = participant_response.participant_response.get(
-                str(question.id)
-            )
-
-            if question.response_type == "correct_answer":
-                correct_answer = (
-                    assessment.questionnaire.questions.filter(id=question.id)
-                    .first()
-                    .correct_answer
-                )
-
-                if str(participant_response_value) in correct_answer:
-                    competency_object[question.competency.name] = (
-                        competency_object[question.competency.name] + 1
-                    )
-
-            elif question.response_type == "rating_type":
-                if participant_response_value:
-                    label_count = sum(
-                        1 for key in question.label.keys() if question.label[key]
-                    )
-                    if not question.reverse_question:
-
-                        swap_dict = swap_positions(label_count)
-
-                        competency_object[question.competency.name] = competency_object[
-                            question.competency.name
-                        ] + (swap_dict[participant_response_value] / label_count)
-                    else:
-
-                        competency_object[question.competency.name] = competency_object[
-                            question.competency.name
-                        ] + (participant_response_value / label_count)
-
-        competency_percentage = {}
-        for comp in total_for_each_comp:
-            competency_percentage[comp] = round(
-                (competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-
-        if project_wise:
-            return competency_percentage
-
-        encoded_image = generate_graph_for_pre_assessment(
-            competency_percentage, total_for_each_comp
-        )
-
-        return encoded_image, compentency_with_description
-
-    if project_wise:
-        return None
-
-    return None, None
-
-
-def generate_graph_for_participant_for_post_assessment(
-    participant, assessment_id, assessment, project_wise=False
-):
-    participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment_id
-    ).first()
-
-    pre_assessment_participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment.pre_assessment.id
-    ).first()
-
-    if participant_response and pre_assessment_participant_response:
-        total_for_each_comp = {}
-        compentency_with_description = []
-
-        for competency in assessment.questionnaire.questions.values(
-            "competency"
-        ).distinct():
-            competency_id = competency["competency"]
-
-            competency_name_for_object = Competency.objects.get(id=competency_id).name
-            competency_description_for_object = Competency.objects.get(
-                id=competency_id
-            ).description
-            competency_object = {
-                "competency_name": competency_name_for_object,
-                "competency_description": competency_description_for_object,
-            }
-            compentency_with_description.append(competency_object)
-
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in total_for_each_comp:
-                total_for_each_comp[question.competency.name] = 1
-            else:
-                total_for_each_comp[question.competency.name] += 1
-
-        competency_object = {}
-        pre_competency_object = {}
-        for question in assessment.questionnaire.questions.all():
-            if question.response_type == "descriptive":
-                continue
-            if question.competency.name not in competency_object:
-                competency_object[question.competency.name] = 0
-            if question.competency.name not in pre_competency_object:
-                pre_competency_object[question.competency.name] = 0
-
-            participant_response_value = participant_response.participant_response.get(
-                str(question.id)
-            )
-            pre_assessment_participant_response_value = (
-                pre_assessment_participant_response.participant_response.get(
-                    str(question.id)
-                )
-            )
-
-            if question.response_type == "correct_answer":
-
-                correct_answer = (
-                    assessment.questionnaire.questions.filter(id=question.id)
-                    .first()
-                    .correct_answer
-                )
-
-                if str(pre_assessment_participant_response_value) in correct_answer:
-
-                    pre_competency_object[question.competency.name] = (
-                        pre_competency_object[question.competency.name] + 1
-                    )
-
-                if str(participant_response_value) in correct_answer:
-                    competency_object[question.competency.name] = (
-                        competency_object[question.competency.name] + 1
-                    )
-
-            elif question.response_type == "rating_type":
-                if participant_response_value:
-                    label_count = sum(
-                        1 for key in question.label.keys() if question.label[key]
-                    )
-                    swap_dict = swap_positions(label_count)
-                    if pre_assessment_participant_response_value:
-                        if not question.reverse_question:
-
-                            pre_competency_object[
-                                question.competency.name
-                            ] = pre_competency_object[question.competency.name] + (
-                                swap_dict[pre_assessment_participant_response_value]
-                                / label_count
-                            )
-                        else:
-                            pre_competency_object[
-                                question.competency.name
-                            ] = pre_competency_object[question.competency.name] + (
-                                pre_assessment_participant_response_value / label_count
-                            )
-
-                    if participant_response_value:
-                        if not question.reverse_question:
-                            competency_object[question.competency.name] = (
-                                competency_object[question.competency.name]
-                                + (swap_dict[participant_response_value] / label_count)
-                            )
-                        else:
-                            competency_object[question.competency.name] = (
-                                competency_object[question.competency.name]
-                                + (participant_response_value / label_count)
-                            )
-
-        competency_percentage = {}
-        pre_competency_percentage = {}
-        for comp in total_for_each_comp:
-            competency_percentage[comp] = round(
-                (competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-            pre_competency_percentage[comp] = round(
-                (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-
-        if project_wise:
-            return pre_competency_percentage, competency_percentage
-        encoded_image = generate_graph_for_pre_post_assessment(
-            pre_competency_percentage, competency_percentage, total_for_each_comp
-        )
-
-        return encoded_image, compentency_with_description
-
-    return None, None
-
-
 class PrePostReportDownloadForParticipant(APIView):
     permission_classes = [AllowAny]
 
@@ -3815,7 +3567,10 @@ class PrePostReportDownloadForParticipant(APIView):
             encoded_image = None
             compentency_with_description = None
 
-            if assessment.assessment_timing == "pre":
+            if (
+                assessment.assessment_timing == "pre"
+                or assessment.assessment_timing == "none"
+            ):
                 (
                     encoded_image,
                     compentency_with_description,
@@ -3878,7 +3633,10 @@ class PrePostReportDownloadForAllParticipant(APIView):
                 encoded_image = None
                 compentency_with_description = None
 
-                if assessment.assessment_timing == "pre":
+                if (
+                    assessment.assessment_timing == "pre"
+                    or assessment.assessment_timing == "none"
+                ):
                     (
                         encoded_image,
                         compentency_with_description,
@@ -4045,87 +3803,41 @@ class ReleaseResults(APIView):
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-            if (
-                assessment.assessment_timing == "pre"
-                or assessment.assessment_timing == "post"
-            ):
-                (
-                    participant_released_results,
-                    created,
-                ) = ParticipantReleasedResults.objects.get_or_create(
-                    assessment=assessment
-                )
-                participant_with_released_results = []
-                if not created:
-                    participant_with_released_results = (
-                        participant_released_results.participants.all()
-                    )
-
-                participant_with_not_released_results = []
-                for participant_observer in assessment.participants_observers.all():
-                    participant_response_present = ParticipantResponse.objects.filter(
-                        assessment=assessment,
-                        participant=participant_observer.participant,
-                    ).exists()
-                    if participant_response_present:
-                        if (
-                            participant_observer.participant
-                            not in participant_with_released_results
-                        ):
-                            participant_with_not_released_results.append(
-                                participant_observer.participant
-                            )
-                            participant_released_results.participants.add(
-                                participant_observer.participant
-                            )
-
-                participant_released_results.save()
-
-                if len(assessment.participants_observers.all()) == (
-                    len(participant_with_released_results)
-                    + len(participant_with_not_released_results)
-                ):
-                    assessment.result_released = True
-                    assessment.save()
-
-                if assessment.assessment_timing != "none":
-                    for participant in participant_with_not_released_results:
-                        encoded_image = None
-                        compentency_with_description = None
-                        if assessment.assessment_timing == "pre":
-                            (
-                                encoded_image,
-                                compentency_with_description,
-                            ) = generate_graph_for_participant(
-                                participant, assessment_id, assessment
-                            )
-                        elif assessment.assessment_timing == "post":
-                            (
-                                encoded_image,
-                                compentency_with_description,
-                            ) = generate_graph_for_participant_for_post_assessment(
-                                participant, assessment_id, assessment
-                            )
-                        send_mail_templates(
-                            "assessment/air_india_report_mail.html",
-                            [participant.email],
-                            "Meeraq Assessment Report",
-                            {
-                                "name": participant.name.title(),
-                                "image_base64": encoded_image,
-                                "compentency_with_description": compentency_with_description,
-                                "assessment_timing": assessment.assessment_timing,
-                                "assessment_name": assessment.participant_view_name,
-                            },
-                            [],
-                        )
-            else:
-                assessment.result_released = True
-                assessment.save()
+            result_sending.delay(assessment_id)
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
-                    "success": "Successfully Released Results",
+                    "success": "The process to release the assessment results has started successfully.",
+                    "assessment_data": serializer.data,
+                }
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to Release Results"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AutomateResultChange(APIView):
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+
+    def put(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            if assessment.automated_result:
+                assessment.automated_result = False
+            else:
+                assessment.automated_result = True
+            assessment.save()
+            if assessment.automated_result:
+                result_sending.delay(assessment_id)
+
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(
+                {
+                    "message": "The process to release the assessment results has started successfully.",
                     "assessment_data": serializer.data,
                 }
             )
@@ -4751,25 +4463,31 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
     def post(self, request):
         try:
             with transaction.atomic():
+                batch = SchedularBatch.objects.get(id=request.data.get("batch_id"))
                 (
                     created,
                     pre_assessment_id,
                     post_assessment_id,
-                ) = create_pre_post_assessments(request)
+                ) = create_pre_post_assessments(request, batch.project)
 
                 pre_assessment = Assessment.objects.get(id=pre_assessment_id)
 
                 if created:
-                    batch = SchedularBatch.objects.get(id=request.data.get("batch_id"))
 
                     for participant in batch.learners.all():
+                        print(participant)
                         participant_object = {
                             "name": participant.name,
                             "email": participant.email,
                             "phone": participant.phone,
                         }
-                        serializer = add_multiple_participants(
-                            participant_object, pre_assessment_id, pre_assessment, False
+
+                        serializer = add_multiple_participants_for_project(
+                            participant_object,
+                            pre_assessment_id,
+                            pre_assessment,
+                            False,
+                            batch.project,
                         )
 
                         course = Course.objects.get(id=request.data.get("course_id"))
@@ -4820,8 +4538,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
 
                     return Response(
                         {
-                            "message": "Pre and Post assessment created and batch added successfully.",
-                            "assessment_data": serializer.data,
+                            "message": "Assessment created and batch added successfully.",
                         },
                         status=status.HTTP_200_OK,
                     )
@@ -4830,6 +4547,73 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
             # Handle specific exceptions if needed
             return Response(
                 {"error": "Faliled to create assessments"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class CreateCoachingAssessmentAndAddMultipleParticipants(APIView):
+    def post(self, request):
+        try:
+            with transaction.atomic():
+                project = Project.objects.get(id=request.data.get("project_id"))
+                (
+                    created,
+                    pre_assessment_id,
+                    post_assessment_id,
+                ) = create_pre_post_assessments(request, project)
+
+                pre_assessment = None
+                if project.pre_assessment:
+                    pre_assessment = Assessment.objects.get(id=pre_assessment_id)
+
+                post_assessment = None
+                if project.post_assessment:
+                    post_assessment = Assessment.objects.get(id=post_assessment_id)
+                engagements = Engagement.objects.filter(project=project)
+                if created:
+                    serializer = None
+                    for engagement in engagements:
+                        participant = engagement.learner
+                        participant_object = {
+                            "name": participant.name,
+                            "email": participant.email,
+                            "phone": participant.phone,
+                        }
+
+                        serializer = add_multiple_participants_for_project(
+                            participant_object,
+                            pre_assessment_id,
+                            pre_assessment,
+                            False,
+                            project,
+                        )
+
+                    mapping = ProjectAssessmentMapping.objects.create(project=project)
+
+                    if pre_assessment:
+                        mapping.assessments.add(pre_assessment)
+                    if post_assessment:
+                        mapping.assessments.add(post_assessment)
+
+                    mapping.save()
+
+                    return Response(
+                        {
+                            "message": "Assessment created and batch added successfully.",
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                else:
+                    return Response(
+                        {
+                            "error": "Failed to create assessment.",
+                        },
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": f"Failed to create assessment."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -4901,6 +4685,36 @@ def send_mail_to_not_responded_participant(request, assessment_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Faild to send emails"}, status=400)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def send_email_reminder(request, assessment_id):
+    try:
+        data = {
+            "participant_observers": request.data.get("participant_observers", []),
+            "assessment_id": assessment_id,
+        }
+        send_email_reminder_assessment_on_click.delay(data)
+        return Response({"message": "Email Sent Sucessfully"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Faild to send email reminder"}, status=400)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def send_whatsapp_reminder(request, assessment_id):
+    try:
+        data = {
+            "participant_observers": request.data.get("participant_observers", []),
+            "assessment_id": assessment_id,
+        }
+        send_whatsapp_reminder_assessment_on_click.delay(data)
+        return Response({"message": "Whatsapp Sent Sucessfully"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Faild to send whatsapp reminder"}, status=400)
 
 
 def get_average_for_all_compentency(compentency_precentages):
@@ -5445,6 +5259,7 @@ def add_user_as_a_participant_of_assessment(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_competency_to_batch(request, batch_id):
@@ -5498,14 +5313,18 @@ def add_competency_to_batch(request, batch_id):
     if serializer.is_valid():
         instance = serializer.save()
         if add_to_all_batches:
-            batches = SchedularBatch.objects.filter(project=instance.batch.project).exclude(id=instance.batch.id)
+            batches = SchedularBatch.objects.filter(
+                project=instance.batch.project
+            ).exclude(id=instance.batch.id)
             for batch in batches:
                 batch_competency_assignment_data = {
                     "batch": batch.id,
                     "competency": competency_id,
                     "selected_behaviors": selected_behaviors,
                 }
-                existing_batch_competency = BatchCompetencyAssignment.objects.filter(competency__id = competency_id, batch__id=batch.id)
+                existing_batch_competency = BatchCompetencyAssignment.objects.filter(
+                    competency__id=competency_id, batch__id=batch.id
+                )
                 if not existing_batch_competency.exists():
                     serializer = BatchCompetencyAssignmentSerializer(
                         data=batch_competency_assignment_data
@@ -5578,12 +5397,10 @@ def edit_competency_assignment(request, batch_id, assignment_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
-def get_batch_competency_assignments(request,batch_id):
+def get_batch_competency_assignments(request, batch_id):
     try:
         assignments = BatchCompetencyAssignment.objects.filter(batch__id=batch_id)
-        serializer = BatchCompetencyAssignmentDepthOneSerializer(
-            assignments, many=True
-        )
+        serializer = BatchCompetencyAssignmentDepthOneSerializer(assignments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -5597,8 +5414,197 @@ def delete_batch_competency(request, batch_competency_id):
         batch_competency = BatchCompetencyAssignment.objects.get(pk=batch_competency_id)
     except BatchCompetencyAssignment.DoesNotExist:
         # If the Batch competency does not exist, return a 404 response
-        return Response({"error": "Batch competency not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"error": "Batch competency not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     # Delete the Batch competency
     batch_competency.delete()
     # Return a success response
-    return Response({"message": "Batch competency deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+    return Response(
+        {"message": "Batch competency deleted successfully"},
+        status=status.HTTP_204_NO_CONTENT,
+    )
+
+
+class GetAssessmentOfCoachingProject(APIView):
+    def get(self, request, assessment_id):
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        try:
+            # get batch and project of assessment
+            assessment_lessons = AssessmentLesson.objects.filter(
+                assessment_modal__id=assessment_id
+            )
+            if assessment_lessons.exists():
+                assessment_lesson = assessment_lessons.first()
+                batch = assessment_lesson.lesson.course.batch
+                project = batch.project
+                return Response(
+                    {"batch": {"id": batch.id}, "project": {"id": project.id}}
+                )
+            else:
+                return Response(
+                    {"error": "Batch and project not found for the assessment"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetAssessmentOfCoachingProject(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, project_id):
+        try:
+            mapping = ProjectAssessmentMapping.objects.get(project__id=project_id)
+            assessment_list = []
+            for assessment in mapping.assessments.all():
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+                assessment_data = {
+                    "id": assessment.id,
+                    "name": assessment.name,
+                    "participant_view_name": assessment.participant_view_name,
+                    "assessment_type": assessment.assessment_type,
+                    "assessment_timing": assessment.assessment_timing,
+                    "assessment_start_date": assessment.assessment_start_date,
+                    "assessment_end_date": assessment.assessment_end_date,
+                    "status": assessment.status,
+                    "total_learners_count": assessment.participants_observers.count(),
+                    "total_responses_count": total_responses_count,
+                    "created_at": assessment.created_at,
+                    "whatsapp_reminder": assessment.whatsapp_reminder,
+                    "email_reminder": assessment.email_reminder,
+                    "reminders": assessment.reminders,
+                    "questionnaire": (
+                        assessment.questionnaire.id
+                        if assessment.questionnaire
+                        else None
+                    ),
+                    "organisation": (
+                        assessment.organisation.id if assessment.organisation else None
+                    ),
+                    "hr": list(assessment.hr.all().values_list("id", flat=True)),
+                    "pre_assessment": (
+                        assessment.pre_assessment.id
+                        if assessment.assessment_timing == "post"
+                        and assessment.pre_assessment
+                        else None
+                    ),
+                }
+
+                assessment_list.append(assessment_data)
+
+            return Response(assessment_list)
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class StoreTempResponseParticipantObserver(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, user_type, unique_id):
+        try:
+
+            response = request.data.get("response")
+            active_question = request.data.get("active_question")
+            current_competency = request.data.get("current_competency")
+            if user_type == "participant":
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    unique_id=unique_id
+                )
+                participant_response, created = (
+                    ParticipantTempResponse.objects.get_or_create(
+                        participant=participant_unique_id.participant,
+                        assessment=participant_unique_id.assessment,
+                    )
+                )
+                participant_response.temp_participant_response = response
+                participant_response.active_question = active_question
+                participant_response.current_competency = current_competency
+                participant_response.save()
+
+            elif user_type == "observer":
+                observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
+
+                observer_response, created1 = (
+                    ObserverTempResponse.objects.get_or_create(
+                        participant=observer_unique_id.participant,
+                        observer=observer_unique_id.observer,
+                        assessment=observer_unique_id.assessment,
+                    )
+                )
+                observer_response.temp_observer_response = response
+                observer_response.active_question = active_question
+                observer_response.current_competency = current_competency
+                observer_response.save()
+
+            return Response(
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to save reponse status"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetTempResponseParticipantObserver(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_type, unique_id):
+        try:
+
+            temp_response = None
+            active_question = None
+            current_competency = None
+
+            if user_type == "participant":
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    unique_id=unique_id
+                )
+                participant_response = ParticipantTempResponse.objects.filter(
+                    participant=participant_unique_id.participant,
+                    assessment=participant_unique_id.assessment,
+                ).first()
+                if participant_response:
+                    temp_response = participant_response.temp_participant_response
+                    active_question = participant_response.active_question
+                    current_competency = participant_response.current_competency
+
+            elif user_type == "observer":
+                observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
+
+                observer_response = ObserverTempResponse.objects.filter(
+                    participant=observer_unique_id.participant,
+                    assessment=observer_unique_id.assessment,
+                    observer=observer_unique_id.observer,
+                ).first()
+                if observer_response:
+                    temp_response = observer_response.temp_observer_response
+                    active_question = observer_response.active_question
+                    current_competency = observer_response.current_competency
+
+            return Response(
+                {
+                    "temp_response": temp_response,
+                    "active_question": active_question,
+                    "current_competency": current_competency,
+                }
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -22,7 +22,7 @@ from api.models import (
     Project,
     Engagement,
 )
-from schedularApi.models import HandoverDetails
+from schedularApi.models import HandoverDetails,GmSheet
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -132,7 +132,7 @@ from decimal import Decimal
 from collections import defaultdict
 from api.permissions import IsInRoles
 from time import sleep
-from ctt.models import Faculties, Batches
+from ctt.models import Faculties, Batches, BatchUsers
 
 env = environ.Env()
 
@@ -584,7 +584,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                         if (
                             bill.get(env("INVOICE_FIELD_NAME"))
                             == invoice["invoice_number"]
-                            and bill.get("vendor_id") == invoice["vendor_id"]
+                            and bill.get("vendor_id") == invoice["vendor_id"] and bill.get('date') == invoice['invoice_date']
                         )
                     ),
                     None,
@@ -722,13 +722,23 @@ def get_line_items_for_template(line_items):
         line_item["igst_tax"] = get_tax(line_item, "IGST")
     return res
 
+def get_financial_year(date):
+    # Assuming financial year starts from April
+    if date.month >= 4:
+        return date.year, date.year + 1
+    else:
+        return date.year - 1, date.year
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def add_invoice_data(request):
+    invoice_date = datetime.strptime(request.data["invoice_date"], "%Y-%m-%d").date()
+    start_year, end_year = get_financial_year(invoice_date)
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
+        invoice_date__range=(f"{start_year}-04-01", f"{end_year}-03-31")
     )
     hsn_or_sac = request.data.get("hsn_or_sac", None)
     if hsn_or_sac:
@@ -1292,7 +1302,7 @@ def fetch_invoices(organization_id):
                 for bill in all_bills
                 if (
                     bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
-                    and bill.get("vendor_id") == invoice["vendor_id"]
+                    and bill.get("vendor_id") == invoice["vendor_id"] and bill.get('date') == invoice['invoice_date']
                 )
             ),
             None,
@@ -1313,6 +1323,7 @@ def fetch_invoices_db():
         bills = Bill.objects.filter(
             vendor_id=invoice["vendor_id"],
             custom_field_hash__cf_invoice=invoice["invoice_number"],
+            date=invoice['invoice_date']
         )
         matching_bill = bills.first()
         all_invoices.append(
@@ -1364,6 +1375,7 @@ def get_invoice(request, invoice_id):
         bills = Bill.objects.filter(
             vendor_id=res["vendor_id"],
             custom_field_hash__cf_invoice=res["invoice_number"],
+            date=invoice.invoice_date
         )
         matching_bill = bills.first()
         res["bill"] = {"status": matching_bill.status} if matching_bill else None
@@ -2138,7 +2150,7 @@ def create_purchase_order_for_outside_vendors(request):
         )
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
-
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             try:
                 purchase_order = PurchaseOrder.objects.get(
                     purchaseorder_id=purchaseorder_created["purchaseorder_id"]
@@ -2152,7 +2164,7 @@ def create_purchase_order_for_outside_vendors(request):
                 )
                 if serializer.is_valid():
                     po_instance = serializer.save()
-                    ctt_pmo = CTTPmo.objects.filter(emai=request.user.username).first()
+                    ctt_pmo = CTTPmo.objects.filter(email=request.user.username).first()
                     po_instance.is_guest_ctt = True if ctt_pmo else False
                 else:
                     print(serializer.errors)
@@ -2801,7 +2813,7 @@ def get_invoices_for_vendor(request, vendor_id, purchase_order_id):
                         if (
                             bill.get(env("INVOICE_FIELD_NAME"))
                             == invoice["invoice_number"]
-                            and bill.get("vendor_id") == invoice["vendor_id"]
+                            and bill.get("vendor_id") == invoice["vendor_id"] and bill.get('date') == invoice['invoice_date']
                         )
                     ),
                     None,
@@ -2931,6 +2943,28 @@ def get_all_sales_orders(request):
         ).data
         res = get_sales_orders_with_project_details(all_sales_orders)
         return Response(res, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sales_orders_for_a_batch(request, batch):
+    try:
+        batch_user = Batches.objects.using("ctt").get(id=batch)
+        sales_orders_queryset = SalesOrder.objects.filter(
+            custom_field_hash__cf_ctt_batch=batch_user.name
+        )
+        all_sales_orders = SalesOrderGetSerializer(
+            sales_orders_queryset, many=True
+        ).data
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        return Response(res, status=status.HTTP_200_OK)
+    except BatchUsers.DoesNotExist:
+        return Response(
+            {"error": "Batch user not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -3128,6 +3162,7 @@ def get_ctt_invoices(request):
             bills = Bill.objects.filter(
                 vendor_id=invoice["vendor_id"],
                 custom_field_hash__cf_invoice=invoice["invoice_number"],
+                date=invoice['invoice_date']
             )
             matching_bill = bills.first()
             all_invoices.append(
@@ -3188,7 +3223,11 @@ def get_sales_order_data(request, salesorder_id):
         response = requests.get(api_url, headers=auth_header)
         if response.status_code == 200:
             sales_order = response.json().get("salesorder")
-            return Response(sales_order, status=status.HTTP_200_OK)
+            gm_sheet = None
+            existing_sales_order= SalesOrder.objects.filter(salesorder_id = sales_order['salesorder_id']).first()
+            if existing_sales_order:
+                gm_sheet = existing_sales_order.gm_sheet.id if existing_sales_order.gm_sheet else None
+            return Response({**sales_order, 'gm_sheet' : gm_sheet}, status=status.HTTP_200_OK)
         else:
             return Response(
                 {"error": "Failed to fetch sales order data"},
@@ -3355,6 +3394,15 @@ def create_sales_order(request):
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
             create_or_update_so(salesorder_created["salesorder_id"])
+            gm_sheet_id = request.data.get("gm_sheet", "")
+            if gm_sheet_id:
+                try:
+                    existing_sales_order = SalesOrder.objects.get(salesorder_id=salesorder_created["salesorder_id"])
+                    gm_sheet = GmSheet.objects.get(id = gm_sheet_id)
+                    existing_sales_order.gm_sheet = gm_sheet
+                    existing_sales_order.save()
+                except Exception as e:
+                    print(str(e))
             project_id = request.data.get("project_id", "")
             project_type = request.data.get("project_type", "")
             status = request.data.get("status", "")
@@ -3771,72 +3819,81 @@ def update_sales_order_status(request, sales_order_id, status):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_total_revenue_and_cost(request):
+def get_total_revenue_and_cost(request,project_id,project_type):
     try:
-        total_rev = 0
-        total_cost = 0
-        all_order_mapping = OrdersAndProjectMapping.objects.all()
-        unique_sales_order_ids = set()
-        unique_purchase_order_ids = set()
+        all_po_id = set()
+        expenses = None
+        if project_type == "SEEQ":
+            expenses = Expense.objects.filter(batch__project__id=project_id)
+        elif project_type == "CAAS":
+            expenses = Expense.objects.filter(session__project__id=project_id)
+        else:
+            return Response(
+                {"error": "Invalid project_type"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        for expense in expenses:
+            all_po_id.add(expense.purchase_order_id)
+        if project_type =="SEEQ":
+            purchase_orders = PurchaseOrder.objects.filter(Q(purchaseorder_id__in=all_po_id) | Q(schedular_project_id=project_id)).distinct()
+        elif project_type == "CAAS":
+            purchase_orders = PurchaseOrder.objects.filter(Q(purchaseorder_id__in=all_po_id) | Q(caas_project_id=project_id)).distinct()
+        all_sales_orders = get_so_for_project(project_id, project_type)
+        total = Decimal('0.0')
+        invoiced_amount = Decimal('0.0')
+        not_invoiced_amount = Decimal('0.0')
+        paid_amount = Decimal('0.0')
+        currency_code = None
+        currency_symbol = None
+        
+        for sales_order in all_sales_orders:
+            total += Decimal(sales_order["total"])
+            currency_code = sales_order["currency_code"]
+            currency_symbol = sales_order["currency_symbol"]
 
-        for order_mapping in all_order_mapping:
-            print(order_mapping)
-            project_sales_orders_ids = order_mapping.sales_order_ids
-            project_purchase_orders_ids = order_mapping.purchase_order_ids
-            # Calculate total invoiced amount for the sales orders of this project
-            expenses = None
-            if order_mapping.project:
-                expenses = Expense.objects.filter(batch__project=order_mapping.project)
+            for invoice in sales_order["invoices"]:
+                invoiced_amount += Decimal(invoice["total"])
+            not_invoiced_amount += Decimal(sales_order["total"]) - invoiced_amount
 
-            if expenses:
-                for expense in expenses:
-                    if expense.purchase_order_id:
-                        project_purchase_orders_ids.append(expense.purchase_order_id)
+            for invoice in sales_order["invoices"]:
+                if invoice["status"] == "paid":
+                    paid_amount += Decimal(invoice["total"])
+        
+        purchase_order_cost = Decimal('0.0')
+        purchase_billed_amount = Decimal('0.0')
+        purchase_paid_amount = Decimal('0.0')
+        purchase_all_bills_paid = []
 
-            project_total_rev = 0
-            project_total_cost = 0
-            for sales_order_id in project_sales_orders_ids:
-                if sales_order_id in unique_sales_order_ids:
-                    continue
-                else:
-                    print("hey", sales_order_id)
-                    sales_order = SalesOrder.objects.get(salesorder_id=sales_order_id)
-                    for invoice in sales_order.invoices:
-                        project_total_rev += (
-                            invoice["total"] * sales_order.exchange_rate
-                        )
-                    unique_sales_order_ids.add(sales_order_id)
-
-            for purchase_order_id in project_purchase_orders_ids:
-                if purchase_order_id in unique_purchase_order_ids:
-                    continue
-                else:
-                    purchase_order = PurchaseOrder.objects.get(
-                        purchaseorder_id=purchase_order_id
-                    )
-                    for bill in purchase_order.bills:
-                        project_total_cost += (
-                            bill["total"] * purchase_order.exchange_rate
-                        )
-                    unique_purchase_order_ids.add(purchase_order_id)
-
-            # Add the total invoiced amount to the overall total_rev
-            total_rev += project_total_rev
-            total_cost += project_total_cost
+        if purchase_orders.exists():
+            for purchase_order in purchase_orders:
+                purchase_order_cost += Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
+                for bill in purchase_order.bills:
+                    purchase_billed_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                    if bill["status"] == "paid":
+                        purchase_paid_amount += Decimal(str(bill["total"]))
+                        purchase_all_bills_paid.append(True)
+                    else:
+                        purchase_all_bills_paid.append(False)
+        profit_percentage = ((total - purchase_order_cost) / total) * 100 if total > 0 else 0
 
         return Response(
             {
-                "total_revenue": total_rev,
-                "total_cost": total_cost,
-                "profit": total_rev - total_cost,
-                "profit_percentage": (
-                    (total_rev - total_cost) / total_rev * 100 if total_rev != 0 else 0
-                ),
+                "sales_order_cost": total,
+                "invoiced_amount": invoiced_amount,
+                "paid_amount": paid_amount,
+                "currency_code": currency_code,
+                "no_of_sales_orders": len(all_sales_orders),
+                "currency_symbol": currency_symbol,
+                "purchase_order_cost": purchase_order_cost,
+                "purchase_billed_amount": purchase_billed_amount,
+                "purchase_paid_amount": purchase_paid_amount,
+                "purchase_all_bills_paid": purchase_all_bills_paid,
+                "profit_generated":(total - purchase_order_cost),
+                "profit_percentage": profit_percentage,
             }
         )
     except Exception as e:
         print(str(e))
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["GET"])
@@ -4971,3 +5028,32 @@ def get_line_items_detail_in_excel(request):
     response["Content-Disposition"] = f"attachment; filename=line_items_details.xlsx"
 
     return response
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_po_data_of_project(request, project_id, project_type):
+    try:
+        all_po_id = set()
+        expenses = None
+        if project_type == "skill_training":
+            expenses = Expense.objects.filter(batch__project__id=project_id)
+        elif project_type == "CAAS":
+            expenses = Expense.objects.filter(session__project__id=project_id)
+        else:
+            return Response(
+                {"error": "Invalid project_type"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        for expense in expenses:
+            all_po_id.add(expense.purchase_order_id)
+        total_sum=0
+        purchase_orders = PurchaseOrder.objects.filter(purchaseorder_id__in=all_po_id)
+        for purchase_order in purchase_orders:
+            total_sum += purchase_order.total * purchase_order.exchange_rate
+        purchase_orders_data = {
+            "total_sum": total_sum
+        }
+        return Response(purchase_orders_data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
