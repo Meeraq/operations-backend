@@ -3465,7 +3465,7 @@ def create_sales_order(request):
                     if env("ENVIRONMENT") == "PRODUCTION"
                     else ["naveen@meeraq.com"]
                 ),
-                ["New Sales Order Created"],
+                "New Sales Order Created",
                 {
                     "so_number": so_number,
                     "customer_name": customer_name,
