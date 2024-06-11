@@ -109,6 +109,7 @@ from .serializers import (
     AssetsDetailedSerializer,
     EmployeeSerializer,
     GmSheetSalesOrderExistsSerializer,
+    FacilitatorContractSerializerNoDepth,
 )
 from .models import (
     SchedularBatch,
@@ -135,6 +136,7 @@ from .models import (
     Benchmark,
     Assets,
     Employee,
+    FacilitatorContract,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -4610,10 +4612,18 @@ def get_facilitators(request):
             )
             overall_nps = calculate_nps_from_answers(overall_answer)
             serializer = FacilitatorSerializer(facilitator)
+            facilitator_contract = FacilitatorContract.objects.filter(
+                facilitator=facilitator , is_archive=False
+            ).first()
             all_fac.append(
                 {
                     **serializer.data,
                     "overall_nps": overall_nps,
+                    "facilitator_contract": (
+                        FacilitatorContractSerializerNoDepth(facilitator_contract).data
+                        if facilitator_contract
+                        else None
+                    ),
                 }
             )
         # Serialize the Coach objects

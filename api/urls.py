@@ -28,6 +28,7 @@ from .views import (
     GetCoachContractFromProject,
     AddRegisteredFacilitator,
     UpdateUserRoles,
+    DownloadFacilitatorContract,
 )
 
 urlpatterns = [
@@ -387,6 +388,11 @@ urlpatterns = [
         "download-coach-contract/<int:coach_contract_id>/",
         DownloadCoachContract.as_view(),
     ),
+     path(
+        "download-facilitator-contract/<int:facilitator_contract_id>/",
+        DownloadFacilitatorContract.as_view(),
+    ),
+    
     path(
         "session-data/",
         SessionData.as_view(),
@@ -638,5 +644,10 @@ urlpatterns = [
         "update-facilitator-contract/<int:facilitator_contract_id>/",
         views.accept_facilitator_contract,
         name="update-facilitator-contract",
+    ),
+        path(
+        "get-contract-of-all-facilitator/",
+        views.get_contract_of_all_facilitator,
+        name="get_contract_of_all_facilitator",
     ),
 ]

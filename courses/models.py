@@ -5,7 +5,7 @@ from schedularApi.models import (
     LiveSession,
     CoachingSession,
     SchedularSessions,
-    SchedularProject
+    SchedularProject,
 )
 import os
 from django.core.exceptions import ValidationError
@@ -285,18 +285,20 @@ class NudgeResources(models.Model):
     name = models.CharField(max_length=255)
     content = models.TextField()
     file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    video = models.ForeignKey(Video, on_delete=models.CASCADE, blank=True, null=True)
     competency = models.ManyToManyField(Competency)
     behavior = models.ManyToManyField(Behavior)
     curriculum = models.ForeignKey(
         Curriculum, on_delete=models.CASCADE, blank=True, null=True
     )
     status = models.CharField(
-        max_length=50, choices=STATUS_CHOICES, blank=True, null=True,default="Draft"  
+        max_length=50, choices=STATUS_CHOICES, blank=True, null=True, default="Draft"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    caas_project_assigned = models.ManyToManyField(Project,blank=True)
-    skill_project_assigned =models.ManyToManyField(SchedularProject,blank=True)
+    caas_project_assigned = models.ManyToManyField(Project, blank=True)
+    skill_project_assigned = models.ManyToManyField(SchedularProject, blank=True)
+
     def __str__(self):
         return self.name
 
@@ -305,6 +307,7 @@ class Nudge(models.Model):
     name = models.CharField(max_length=255, blank=True, null=True)
     content = models.TextField(blank=True, null=True)
     file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    video = models.ForeignKey(Video, on_delete=models.CASCADE, blank=True, null=True)
     nudge_resources = models.ForeignKey(
         NudgeResources, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
