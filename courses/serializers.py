@@ -59,6 +59,13 @@ class NudgeSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+
+class NudgeSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Nudge
+        fields = "__all__"
+        depth=1
+
 class NudgeResourcesSerializer(serializers.ModelSerializer):
     class Meta:
         model = NudgeResources
