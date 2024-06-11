@@ -10539,7 +10539,7 @@ class DownloadFacilitatorContract(APIView):
     def get(self, request, facilitator_contract_id, format=None):
         try:
             facilitator_contract = FacilitatorContract.objects.get(
-                id=facilitator_contract_id
+                id=facilitator_contract_id , is_archive=False
             )
 
             html_content = render_to_string(
@@ -13111,7 +13111,7 @@ def assign_to_all_facilitators(request):
 
         for facilitator in facilitators:
             facilitator_contract = FacilitatorContract.objects.filter(
-                facilitator=facilitator
+                facilitator=facilitator , is_archive=False
             ).first()
             if not facilitator_contract:
                 new_facilitator_contract = FacilitatorContract.objects.create(
@@ -13137,15 +13137,14 @@ def assign_to_facilitators(request):
 
             facilitator_contract = FacilitatorContract.objects.filter(
                 facilitator=facilitator
-            ).first()
+            )
 
             if facilitator_contract:
-                facilitator_contract.project_contract = contract
-                facilitator_contract.save()
-            else:
-                new_facilitator_contract = FacilitatorContract.objects.create(
-                    project_contract=contract, facilitator=facilitator, status="pending"
-                )
+                facilitator_contract.update(is_archive=True) 
+
+            new_facilitator_contract = FacilitatorContract.objects.create(
+                project_contract=contract, facilitator=facilitator, status="pending"
+            )
 
         return Response({"message": "Contract Assigned Successfully."}, status=201)
     except Exception as e:
@@ -13174,7 +13173,7 @@ def get_contract_of_facilitator(request, facilitator_id):
     try:
 
         facilitator_contract = FacilitatorContract.objects.filter(
-            facilitator__id=facilitator_id
+            facilitator__id=facilitator_id  , is_archive=False
         ).first()
 
         serializer = FacilitatorContractSerializer(facilitator_contract)
