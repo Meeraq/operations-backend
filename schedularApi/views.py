@@ -8685,6 +8685,15 @@ def learner_action_items_in_batch(request, batch_id, learner_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def all_learner_action_items(request, learner_id):
+    action_items = ActionItem.objects.filter(
+        learner__id=learner_id
+    ).order_by("-created_at")
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def learner_action_items_in_session(request, session_id):
     session = SchedularSessions.objects.get(id=session_id)
     action_items = ActionItem.objects.filter(

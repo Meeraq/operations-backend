@@ -459,6 +459,11 @@ urlpatterns = [
         name="learner_action_items_in_batch",
     ),
     path(
+        "learner/action-items/<int:learner_id>/",
+        views.all_learner_action_items,
+        name="all_learner_action_items",
+    ),
+    path(
         "batch/action-items/<int:batch_id>/<int:learner_id>/",
         views.learner_action_items_in_batch,
         name="learner_action_items_in_batch",
