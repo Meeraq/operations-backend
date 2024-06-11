@@ -14,6 +14,7 @@ from api.models import (
     Goal,
     Sales,
     Project,
+    Template,
 )
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -293,8 +294,8 @@ class FacilitatorContract(models.Model):
         ("rejected", "Rejected"),
     ]
 
-    project_contract = models.ForeignKey(
-        ProjectContract, on_delete=models.CASCADE, blank=True
+    template = models.ForeignKey(
+        Template, on_delete=models.CASCADE, blank=True,null=True
     )
     name_inputed = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(
@@ -308,6 +309,7 @@ class FacilitatorContract(models.Model):
     )
     facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE)
     send_date = models.DateField(auto_now_add=True, blank=True)
+    is_archive = models.BooleanField(default=False)
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
 
