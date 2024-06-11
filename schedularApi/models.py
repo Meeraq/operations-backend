@@ -14,6 +14,7 @@ from api.models import (
     Goal,
     Sales,
     Project,
+    Template,
 )
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -293,8 +294,8 @@ class FacilitatorContract(models.Model):
         ("rejected", "Rejected"),
     ]
 
-    project_contract = models.ForeignKey(
-        ProjectContract, on_delete=models.CASCADE, blank=True
+    template = models.ForeignKey(
+        Template, on_delete=models.CASCADE, blank=True,null=True
     )
     name_inputed = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(

@@ -13107,7 +13107,7 @@ def assign_to_all_facilitators(request):
     try:
         contract_id = request.data.get("contract_id")
         facilitators = Facilitator.objects.all()
-        contract = ProjectContract.objects.get(id=contract_id)
+        contract = Template.objects.get(id=contract_id)
 
         for facilitator in facilitators:
             facilitator_contract = FacilitatorContract.objects.filter(
@@ -13115,7 +13115,7 @@ def assign_to_all_facilitators(request):
             ).first()
             if not facilitator_contract:
                 new_facilitator_contract = FacilitatorContract.objects.create(
-                    project_contract=contract, facilitator=facilitator, status="pending"
+                    template=contract, facilitator=facilitator, status="pending"
                 )
 
         return Response({"message": "Contract Assigned Successfully."}, status=201)
@@ -13131,7 +13131,7 @@ def assign_to_facilitators(request):
         contract_id = request.data.get("contract_id")
         selected_facilitator_ids = request.data.get("selectedFacilitators")
 
-        contract = ProjectContract.objects.get(id=contract_id)
+        contract = Template.objects.get(id=contract_id)
         for facilitator_id in selected_facilitator_ids:
             facilitator = Facilitator.objects.get(id=facilitator_id)
 
@@ -13143,7 +13143,7 @@ def assign_to_facilitators(request):
                 facilitator_contract.update(is_archive=True) 
 
             new_facilitator_contract = FacilitatorContract.objects.create(
-                project_contract=contract, facilitator=facilitator, status="pending"
+                template=contract, facilitator=facilitator, status="pending"
             )
 
         return Response({"message": "Contract Assigned Successfully."}, status=201)
@@ -13189,7 +13189,7 @@ def get_contract_of_facilitator(request, facilitator_id):
 def get_contract_of_all_facilitator(request):
     try:
 
-        facilitator_contract = FacilitatorContract.objects.all()
+        facilitator_contract = FacilitatorContract.objects.all().order_by("-created_at")
 
         serializer = FacilitatorContractSerializer(facilitator_contract, many=True)
 
