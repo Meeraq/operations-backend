@@ -9654,9 +9654,10 @@ class GetCoachContractFromProject(APIView):
                     + coach_contract.coach.last_name,
                     "email": coach_contract.coach.email,
                     "profile_pic": (
-                        coach_contract.coach.profile_pic
-                        if coach_contract.coach.profile_pic
-                        else None
+                        # coach_contract.coach.profile_pic
+                        # if coach_contract.coach.profile_pic
+                        # else
+                        None
                     ),
                     "status": coach_contract.status,
                     "send_date": coach_contract.send_date,
@@ -10539,7 +10540,7 @@ class DownloadFacilitatorContract(APIView):
     def get(self, request, facilitator_contract_id, format=None):
         try:
             facilitator_contract = FacilitatorContract.objects.get(
-                id=facilitator_contract_id , is_archive=False
+                id=facilitator_contract_id
             )
 
             html_content = render_to_string(
@@ -13111,7 +13112,7 @@ def assign_to_all_facilitators(request):
 
         for facilitator in facilitators:
             facilitator_contract = FacilitatorContract.objects.filter(
-                facilitator=facilitator , is_archive=False
+                facilitator=facilitator, is_archive=False
             ).first()
             if not facilitator_contract:
                 new_facilitator_contract = FacilitatorContract.objects.create(
@@ -13140,7 +13141,7 @@ def assign_to_facilitators(request):
             )
 
             if facilitator_contract:
-                facilitator_contract.update(is_archive=True) 
+                facilitator_contract.update(is_archive=True)
 
             new_facilitator_contract = FacilitatorContract.objects.create(
                 template=contract, facilitator=facilitator, status="pending"
@@ -13171,9 +13172,8 @@ def get_all_facilitators_contracts(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
 def get_contract_of_facilitator(request, facilitator_id):
     try:
-
         facilitator_contract = FacilitatorContract.objects.filter(
-            facilitator__id=facilitator_id  , is_archive=False
+            facilitator__id=facilitator_id, is_archive=False
         ).first()
 
         serializer = FacilitatorContractSerializer(facilitator_contract)
