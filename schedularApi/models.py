@@ -308,6 +308,7 @@ class FacilitatorContract(models.Model):
     )
     facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE)
     send_date = models.DateField(auto_now_add=True, blank=True)
+    is_archive = models.BooleanField(default=False)
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
 
