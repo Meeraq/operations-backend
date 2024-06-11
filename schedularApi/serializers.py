@@ -281,6 +281,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
 class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
     sales_order_exists = serializers.SerializerMethodField()
+    offering_grossmargin = serializers.SerializerMethodField()
 
     class Meta:
         model = GmSheet
@@ -288,6 +289,11 @@ class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
 
     def get_sales_order_exists(self, obj):
         return SalesOrder.objects.filter(gm_sheet_id=obj.id).exists()
+
+    def get_offering_grossmargin(self, obj):
+        offerings = Offering.objects.filter(gm_sheet=obj)
+        return [offering.gross_margin for offering in offerings if offering.gross_margin]
+
 
 
 class OfferingSerializer(serializers.ModelSerializer):
