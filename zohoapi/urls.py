@@ -431,5 +431,6 @@ urlpatterns = [
         views.get_po_data_of_project,
         name="get_po_data_of_project",
     ),
+    path('vendor/update-msme/<int:vendor_id>/', views.update_vendor_msme)
     
 ]

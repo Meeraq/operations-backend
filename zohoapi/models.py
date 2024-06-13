@@ -18,6 +18,8 @@ class Vendor(models.Model):
     is_upload_invoice_allowed = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
     active_inactive = models.BooleanField(default=True)
+    is_msme = models.BooleanField(default=None, null=True, blank=True)
+
 
     def __str__(self):
         return self.name

@@ -911,31 +911,36 @@ def send_email_to_recipients(id):
             sent_email.status = "completed"
             sent_email.save()
             for recipient in sent_email.recipients:
-                recipient_name = recipient["name"]
-                recipient_email = recipient["email"]
-                email_content = sent_email.template.template_data.replace(
-                    "{{learnerName}}", recipient_name
-                )
-                email_message_learner = render_to_string(
-                    "default.html",
-                    {
-                        "email_content": mark_safe(email_content),
-                        "email_title": "hello",
-                        "subject": sent_email.subject,
-                    },
-                )
-                email = EmailMessage(
-                    sent_email.subject,
-                    email_message_learner,
-                    settings.DEFAULT_FROM_EMAIL,
-                    [recipient_email],
-                )
-                email.content_subtype = "html"
-                email.send()
-                print(
-                    "Email sent to:", recipient_email, "for recipient:", recipient_name
-                )
-                sleep(6)
+                try:
+                    
+                    recipient_name = recipient["name"]
+                    recipient_email = recipient["email"]
+                    email_content = sent_email.template.template_data.replace(
+                        "{{learnerName}}", recipient_name
+                    )
+
+                    email_message_learner = render_to_string(
+                        "default.html",
+                        {
+                            "email_content": mark_safe(email_content),
+                            "email_title": "hello",
+                            "subject": sent_email.subject,
+                        },
+                    )
+                    email = EmailMessage(
+                        sent_email.subject,
+                        email_message_learner,
+                        settings.DEFAULT_FROM_EMAIL,
+                        [recipient_email],
+                    )
+                    email.content_subtype = "html"
+                    email.send()
+                    print(
+                        "Email sent to:", recipient_email, "for recipient:", recipient_name
+                    )
+                    sleep(6)
+                except Exception as e:
+                    print(str(e))
             return "success"
         return "error: sent email is not pending"
     except:

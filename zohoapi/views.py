@@ -5057,3 +5057,14 @@ def get_po_data_of_project(request, project_id, project_type):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_vendor_msme(request,vendor_id):
+    vendor = Vendor.objects.get(id = vendor_id)
+    vendor.is_msme = request.data.get("is_msme", None)
+    vendor.save()
+    return Response({"message" : "MSME status updated successfully!"})
