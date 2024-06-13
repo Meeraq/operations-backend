@@ -59,15 +59,34 @@ urlpatterns = [
         views.get_card_data_for_dashboard_ctt,
         name="get_card_data_for_dashboard_ctt",
     ),
-      path(
+    path(
         "get-all-ctt-faculties/",
         views.get_all_ctt_faculties,
         name="get_all_ctt_faculties",
     ),
-        path(
+    path(
         "get-the-profitability-of-a-batch/<int:batch_id>/",
         views.get_the_profitability_of_a_batch,
         name="get_the_profitability_of_a_batch",
     ),
-   
+    path(
+        "get-upcoming-sessions/",
+        views.get_upcoming_sessions,
+        name="get_upcoming_sessions",
+    ),
+    path(
+        "get-past-sessions/",
+        views.get_past_sessions,
+        name="get_past_sessions",
+    ),
+    path(
+        "add-attendance-of-session/",
+        views.add_attendance_of_session,
+        name="add_attendance_of_session",
+    ),
+    path(
+        "get-attendance-of-session/<int:session_id>/",
+        views.get_attendance_of_session,
+        name="get_attendance_of_session",
+    ),
 ]

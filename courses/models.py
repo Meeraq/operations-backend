@@ -389,3 +389,10 @@ class CttFeedbackResponse(models.Model):
     answers = models.ManyToManyField(Answer)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class CttSessionAttendance(models.Model):
+    session = models.IntegerField(blank=True, null=True)
+    attendance = models.JSONField(default=list, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
