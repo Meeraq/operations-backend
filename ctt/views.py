@@ -991,12 +991,19 @@ def get_the_profitability_of_a_batch(request, batch_id):
 @permission_classes([IsAuthenticated])
 def get_upcoming_sessions(request):
     try:
+        batch_id = request.query_params.get("batch_id")
         now = datetime.now()
         upcoming_sessions = (
             Sessions.objects.using("ctt")
             .filter(start_time__gte=now, date__gte=now.date())
             .order_by("date", "start_time")
         )
+
+        if batch_id:
+            upcoming_sessions = upcoming_sessions.filter(
+                batch__id=int(batch_id)
+            ).order_by("date", "start_time")
+
         all_sessions = []
         for session in upcoming_sessions:
             session_attendance = CttSessionAttendance.objects.filter(
@@ -1004,9 +1011,11 @@ def get_upcoming_sessions(request):
             ).first()
             user_names = None
             if session_attendance:
-                users = Users.objects.using("ctt").filter(
-                    batchusers__id__in=session_attendance.attendance
-                ).distinct()
+                users = (
+                    Users.objects.using("ctt")
+                    .filter(batchusers__id__in=session_attendance.attendance)
+                    .distinct()
+                )
                 user_names = [user.first_name + " " + user.last_name for user in users]
             all_sessions.append(
                 {
@@ -1034,12 +1043,19 @@ def get_upcoming_sessions(request):
 @permission_classes([IsAuthenticated])
 def get_past_sessions(request):
     try:
+        batch_id = request.query_params.get("batch_id")
         now = datetime.now()
         past_sessions = (
             Sessions.objects.using("ctt")
             .filter(end_time__lte=now, date__lte=now.date())
             .order_by("-date", "-start_time")
         )
+
+        if batch_id:
+            past_sessions = past_sessions.filter(batch__id=int(batch_id)).order_by(
+                "-date", "-start_time"
+            )
+
         all_sessions = []
 
         for session in past_sessions:
@@ -1048,9 +1064,11 @@ def get_past_sessions(request):
             ).first()
             user_names = None
             if session_attendance:
-                users = Users.objects.using("ctt").filter(
-                    batchusers__id__in=session_attendance.attendance
-                ).distinct()
+                users = (
+                    Users.objects.using("ctt")
+                    .filter(batchusers__id__in=session_attendance.attendance)
+                    .distinct()
+                )
                 user_names = [user.first_name + " " + user.last_name for user in users]
             all_sessions.append(
                 {
