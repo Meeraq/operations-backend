@@ -209,12 +209,14 @@ from schedularApi.models import (
     CoachContract,
     ProjectContract,
     Benchmark,
+    FacilitatorContract,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
     CoachPricingSerializer,
     TaskSerializer,
     ExpenseSerializerDepthOne,
+    FacilitatorContractSerializer,
 )
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
@@ -1161,6 +1163,9 @@ FIELD_NAME_VALUES = {
     "product_type": "Product Type",
     "category": "Category",
     "asset_location": "Location",
+    "coaching_type":"Coaching Type",
+    "credentials_feels_like":"Credential Feels Like",
+    "competency":"Competency"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -2272,6 +2277,10 @@ def add_coach(request):
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     ctt_nctt = json.loads(request.data["ctt_nctt"])
+    competency = json.loads(request.data['competency'])
+    credentials_feels_like = request.data['credentials_feels_like']
+    coaching_type =request.data['coaching_type']
+    intro_summary = request.data.get("intro_summary", "")
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
     username = (
@@ -2384,6 +2393,10 @@ def add_coach(request):
                 is_coach=is_coach,
                 is_mentor=is_mentor,
                 is_consultant=is_consultant,
+                intro_summary=intro_summary,
+                competency=competency,
+                credentials_feels_like=credentials_feels_like,
+                coaching_type=coaching_type
             )
 
             # Approve coach
@@ -5341,6 +5354,11 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "invitees": invitees,
                 "coach": coach,
                 "project": project,
+                "engagement": (
+                    session_request.engagement.id
+                    if session_request.engagement
+                    else None
+                ),
             }
         )
     for schedular_session in schedular_sessions:
@@ -9651,9 +9669,10 @@ class GetCoachContractFromProject(APIView):
                     + coach_contract.coach.last_name,
                     "email": coach_contract.coach.email,
                     "profile_pic": (
-                        coach_contract.coach.profile_pic
-                        if coach_contract.coach.profile_pic
-                        else None
+                        # coach_contract.coach.profile_pic
+                        # if coach_contract.coach.profile_pic
+                        # else
+                        None
                     ),
                     "status": coach_contract.status,
                     "send_date": coach_contract.send_date,
@@ -10472,7 +10491,7 @@ class DownloadCoachContract(APIView):
     def get(self, request, coach_contract_id, format=None):
         try:
             coach_contract = CoachContract.objects.get(id=coach_contract_id)
-            coach_contract.project_contract.project.project_structure
+
             coach_status = CoachStatus.objects.get(
                 coach=coach_contract.coach,
                 project=coach_contract.project_contract.project,
@@ -10511,6 +10530,45 @@ class DownloadCoachContract(APIView):
                     "total_sessions": total_sessions,
                     "total_duration": total_duration,
                     "total_coach_fees": total_coach_fees,
+                },
+            )
+            pdf = pdfkit.from_string(
+                html_content,
+                False,
+                configuration=pdfkit_config,
+            )
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = f'attachment; filename={f"Contract.pdf"}'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download Contract."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownloadFacilitatorContract(APIView):
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+
+    def get(self, request, facilitator_contract_id, format=None):
+        try:
+            facilitator_contract = FacilitatorContract.objects.get(
+                id=facilitator_contract_id
+            )
+
+            html_content = render_to_string(
+                "contract/facilitator_contract_template.html",
+                {
+                    "name": facilitator_contract.facilitator.first_name
+                    + " "
+                    + facilitator_contract.facilitator.last_name,
+                    "content": facilitator_contract.project_contract.content,
+                    "name_inputed": facilitator_contract.name_inputed.capitalize(),
+                    "signed_date": facilitator_contract.response_date.strftime(
+                        "%d-%m-%Y"
+                    ),
                 },
             )
             pdf = pdfkit.from_string(
@@ -12993,3 +13051,190 @@ def edit_curriculum(request, curriculum_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update curriculum."}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def meeraq_chatbot(request):
+    try:
+        client = OpenAI()
+        prompt = request.data.get("prompt")
+        chat_entry = ChatHistory.objects.create(prompt=prompt)
+        last_three_chats = list(
+            ChatHistory.objects.order_by("-id")[:3].values_list("prompt", flat=True)
+        )
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Read the contents of https://meeraq.com/ carefully. Mira will now act as a chatbot for queries related to meeraq only and dont answer any other queries than meeraq and all the answers should be crisp and in 2 liners only.-> Meeraq\n\nAbout Us:\nMeeraq is committed to transforming individuals and organizations by fostering 10X leaders who drive tangible impact across domains.\n\nPlatform:\nWe utilize technology to enhance our impact. Our proprietary platform delivers intelligent, automated, and seamless L&D experiences to companies and employees.\n\nOfferings:\n\nCoaching: Set up employees for success and unleash their potential.\nLearning: Craft impactful learning journeys to upskill and reskill your workforce.\nCertifications: Develop certified coaching and mentoring practitioners within your organization.\nAssessments: Take the first step towards organizational transformation.\n\nEvents:\nStay updated with our latest events and webinars aimed at enhancing leadership agility and fostering continuous learning.\n\nResources:\nExplore our blogs and case studies to gain insights into boosting employee success, democratizing coaching, maximizing training impact, and more.\n\nContact Us:\nReach out to us to set up a call with our experts and embark on a transformational L&D journey.".join(
+                        last_three_chats
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        chat_entry.response = completion.choices[0].message.content.strip()
+        chat_entry.save()
+        return Response(
+            completion.choices[0].message.content.strip(), status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def ctt_chatbot(request):
+    try:
+        client = OpenAI()
+        prompt = request.data.get("prompt")
+        chat_entry = ChatHistory.objects.create(prompt=prompt)
+        last_three_chats = list(
+            ChatHistory.objects.order_by("-id")[:3].values_list("prompt", flat=True)
+        )
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Read the contents of https://coach-to-transformation.com/ carefully. Mira will now act as a chatbot for queries related to Coach to tranformation only and dont answer any other queries than CTT (coach to transformation) and all the answers should be crisp and in 2 liners only.-> Certainly! Here's a more concise summary: Mentoring is essential for leadership development and employee growth. Coach-To-Transformation offers an Effective Mentoring Program focusing on structured skill development for managers. Benefits include trained mentors, emerging leader development, high engagement, talent retention, and positive culture. Creating a Coaching Culture: Coaching culture fosters trust, creativity, continuous learning, and engagement. Coach-To-Transformation provides interventions like internal coach training and manager empowerment. Benefits encompass leadership development, improved motivation, and enhanced communication. Developing Internal Coaches: Internal coaching involves training employees to become certified coaches. Benefits include democratizing coaching, fostering trust, improving productivity, and reducing costs. Coach-To-Transformation offers a comprehensive certification program with classroom training and mentor coaching. Lead(er) as a Coach Program: This program enables leaders to incorporate coaching into their leadership style. Benefits include understanding leadership dynamics, fostering communication, and becoming a curious leader. Coach-To-Transformation provides customizable modules covering active listening, powerful questioning, emotional intelligence, and situational leadership. Coach As A Service: Coach-To-Transformation offers qualified coaches tailored to organizational needs. Each coach undergoes rigorous selection and real-time project tracking. Services cover various coaching needs, including leadership, executive, performance, career, transition, and maternity coaching. Overall, embracing mentoring, coaching, and creating a coaching culture enables organizations to cultivate a workforce equipped for success. Coach-To-Transformation provides structured programs and tailored interventions to unleash talent potential and drive sustainable growth. please check the coach-to-tranformation.com and for other queries guide throught that.".join(
+                        last_three_chats
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        chat_entry.response = completion.choices[0].message.content.strip()
+        chat_entry.save()
+        return Response(
+            completion.choices[0].message.content.strip(), status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+def assign_to_all_facilitators(request):
+    try:
+        contract_id = request.data.get("contract_id")
+        facilitators = Facilitator.objects.all()
+        contract = Template.objects.get(id=contract_id)
+
+        for facilitator in facilitators:
+            facilitator_contract = FacilitatorContract.objects.filter(
+                facilitator=facilitator, is_archive=False
+            ).first()
+            if not facilitator_contract:
+                new_facilitator_contract = FacilitatorContract.objects.create(
+                    template=contract, facilitator=facilitator, status="pending"
+                )
+
+        return Response({"message": "Contract Assigned Successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to assign contract."}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+def assign_to_facilitators(request):
+    try:
+        contract_id = request.data.get("contract_id")
+        selected_facilitator_ids = request.data.get("selectedFacilitators")
+
+        contract = Template.objects.get(id=contract_id)
+        for facilitator_id in selected_facilitator_ids:
+            facilitator = Facilitator.objects.get(id=facilitator_id)
+
+            facilitator_contract = FacilitatorContract.objects.filter(
+                facilitator=facilitator
+            )
+
+            if facilitator_contract:
+                facilitator_contract.update(is_archive=True)
+
+            new_facilitator_contract = FacilitatorContract.objects.create(
+                template=contract, facilitator=facilitator, status="pending"
+            )
+
+        return Response({"message": "Contract Assigned Successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to assign contract."}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum")])
+def get_all_facilitators_contracts(request):
+    try:
+
+        facilitator_contract = FacilitatorContract.objects.all()
+
+        serializer = FacilitatorContractSerializer(facilitator_contract, many=True)
+
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
+def get_contract_of_facilitator(request, facilitator_id):
+    try:
+        facilitator_contract = FacilitatorContract.objects.filter(
+            facilitator__id=facilitator_id, is_archive=False
+        ).first()
+
+        serializer = FacilitatorContractSerializer(facilitator_contract)
+
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
+def get_contract_of_all_facilitator(request):
+    try:
+
+        facilitator_contract = FacilitatorContract.objects.all().order_by("-created_at")
+
+        serializer = FacilitatorContractSerializer(facilitator_contract, many=True)
+
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
+def accept_facilitator_contract(request, facilitator_contract_id):
+    try:
+        name_inputted = request.data.get("name_inputted")
+        if not name_inputted:
+            return Response({"error": "Name inputted is required."}, status=500)
+
+        facilitator_contract = get_object_or_404(
+            FacilitatorContract, id=facilitator_contract_id
+        )
+        name_present = f"{facilitator_contract.facilitator.first_name} {facilitator_contract.facilitator.last_name}"
+
+        if name_inputted.strip().lower() == name_present.strip().lower():
+            facilitator_contract.status = "approved"
+            facilitator_contract.response_date = timezone.now().date()
+            facilitator_contract.name_inputed = name_present
+            facilitator_contract.save()
+            return Response({"message": "Contract accepted successfully."}, status=200)
+        else:
+            return Response({"error": "Name does not match."}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to accept contract."}, status=500)

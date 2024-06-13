@@ -19,7 +19,8 @@ from .models import (
     GmSheet,
     Offering,
     Benchmark,
-    Employee
+    Employee,
+    FacilitatorContract,
 )
 from api.models import Coach
 from api.models import Sales
@@ -50,6 +51,18 @@ class SessionItemSerializer(serializers.Serializer):
         max_digits=10, decimal_places=2, allow_null=True, required=False
     )
 
+
+class FacilitatorContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorContract
+        fields = "__all__"
+        depth= 1
+
+class FacilitatorContractSerializerNoDepth(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorContract
+        fields = "__all__"
+        
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
@@ -268,6 +281,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
 class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
     sales_order_exists = serializers.SerializerMethodField()
+    offering_grossmargin = serializers.SerializerMethodField()
 
     class Meta:
         model = GmSheet
@@ -275,6 +289,11 @@ class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
 
     def get_sales_order_exists(self, obj):
         return SalesOrder.objects.filter(gm_sheet_id=obj.id).exists()
+
+    def get_offering_grossmargin(self, obj):
+        offerings = Offering.objects.filter(gm_sheet=obj)
+        return [offering.gross_margin for offering in offerings if offering.gross_margin]
+
 
 
 class OfferingSerializer(serializers.ModelSerializer):
