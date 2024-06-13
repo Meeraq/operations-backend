@@ -59,6 +59,7 @@ class SchedularProject(models.Model):
     )
     is_archive = models.BooleanField(default=False)
     teams_enabled = models.BooleanField(blank=True, default=False)
+    is_ngo_project = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -120,7 +121,7 @@ class CoachingSession(models.Model):
     SESSION_CHOICES = [
         ("laser_coaching_session", "Laser Coaching Session"),
         ("mentoring_session", "Mentoring Session"),
-        ("action_coaching_session", "Action Coaching Session")
+        ("action_coaching_session", "Action Coaching Session"),
     ]
     booking_link = models.CharField(max_length=500, blank=True, default="")
     start_date = models.DateField(blank=True, null=True)
@@ -320,7 +321,7 @@ class CoachPricing(models.Model):
     SESSION_CHOICES = [
         ("laser_coaching_session", "Laser Coaching Session"),
         ("mentoring_session", "Mentoring Session"),
-        ("action_coaching_session", "Action Coaching Session")
+        ("action_coaching_session", "Action Coaching Session"),
     ]
 
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
@@ -390,7 +391,8 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.name}"
-    
+
+
 class Employee(models.Model):
     first_name = models.CharField(max_length=30)
     last_name = models.CharField(max_length=30)
@@ -399,6 +401,7 @@ class Employee(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
 
 class Assets(models.Model):
     STATUS_CHOICES = [
@@ -410,23 +413,27 @@ class Assets(models.Model):
     asset_id = models.CharField(max_length=10, blank=True, null=True)
     name = models.CharField(max_length=255, default="", blank=True)
     category = models.CharField(max_length=255, default="", blank=True)
-    assigned_to = models.ForeignKey(Employee, on_delete=models.SET_NULL, blank=True, null=True)
+    assigned_to = models.ForeignKey(
+        Employee, on_delete=models.SET_NULL, blank=True, null=True
+    )
     update_at = models.DateTimeField(auto_now=True)
-    description = models.TextField(blank=True, null=True,max_length=255)
+    description = models.TextField(blank=True, null=True, max_length=255)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
     updates = models.JSONField(default=list, blank=True)
-    serial_number =models.CharField(max_length=255, default="", blank=True)
-    asset_location = models.CharField(max_length=255,default="", blank=True )
+    serial_number = models.CharField(max_length=255, default="", blank=True)
+    asset_location = models.CharField(max_length=255, default="", blank=True)
     purchase_date = models.DateTimeField(null=True, blank=True)
     due_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
 class Benchmark(models.Model):
     year = models.CharField(max_length=9, default=str(datetime.now().year))
     project_type = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)  # Add the updated_at field
-    
+
+
 class GmSheet(models.Model):
     DEAL_STATUS_CHOICES = [
         ("pending", "Pending"),
