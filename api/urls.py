@@ -646,7 +646,7 @@ urlpatterns = [
         name="update-facilitator-contract",
     ),
         path(
-        "get-contract-of-all-facilitator/",
+        "get-contract-of-all-facilitators/",
         views.get_contract_of_all_facilitator,
         name="get_contract_of_all_facilitator",
     ),

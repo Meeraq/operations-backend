@@ -1163,6 +1163,9 @@ FIELD_NAME_VALUES = {
     "product_type": "Product Type",
     "category": "Category",
     "asset_location": "Location",
+    "coaching_type":"Coaching Type",
+    "credentials_feels_like":"Credential Feels Like",
+    "competency":"Competency"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -2273,6 +2276,10 @@ def add_coach(request):
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     ctt_nctt = json.loads(request.data["ctt_nctt"])
+    competency = json.loads(request.data['competency'])
+    credentials_feels_like = request.data['credentials_feels_like']
+    coaching_type =request.data['coaching_type']
+    intro_summary = request.data.get("intro_summary", "")
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
     username = (
@@ -2385,6 +2392,10 @@ def add_coach(request):
                 is_coach=is_coach,
                 is_mentor=is_mentor,
                 is_consultant=is_consultant,
+                intro_summary=intro_summary,
+                competency=competency,
+                credentials_feels_like=credentials_feels_like,
+                coaching_type=coaching_type
             )
 
             # Approve coach
@@ -9654,9 +9665,10 @@ class GetCoachContractFromProject(APIView):
                     + coach_contract.coach.last_name,
                     "email": coach_contract.coach.email,
                     "profile_pic": (
-                        coach_contract.coach.profile_pic
-                        if coach_contract.coach.profile_pic
-                        else None
+                        # coach_contract.coach.profile_pic
+                        # if coach_contract.coach.profile_pic
+                        # else
+                        None
                     ),
                     "status": coach_contract.status,
                     "send_date": coach_contract.send_date,
@@ -10539,7 +10551,7 @@ class DownloadFacilitatorContract(APIView):
     def get(self, request, facilitator_contract_id, format=None):
         try:
             facilitator_contract = FacilitatorContract.objects.get(
-                id=facilitator_contract_id , is_archive=False
+                id=facilitator_contract_id
             )
 
             html_content = render_to_string(
@@ -13107,15 +13119,15 @@ def assign_to_all_facilitators(request):
     try:
         contract_id = request.data.get("contract_id")
         facilitators = Facilitator.objects.all()
-        contract = ProjectContract.objects.get(id=contract_id)
+        contract = Template.objects.get(id=contract_id)
 
         for facilitator in facilitators:
             facilitator_contract = FacilitatorContract.objects.filter(
-                facilitator=facilitator , is_archive=False
+                facilitator=facilitator, is_archive=False
             ).first()
             if not facilitator_contract:
                 new_facilitator_contract = FacilitatorContract.objects.create(
-                    project_contract=contract, facilitator=facilitator, status="pending"
+                    template=contract, facilitator=facilitator, status="pending"
                 )
 
         return Response({"message": "Contract Assigned Successfully."}, status=201)
@@ -13131,7 +13143,7 @@ def assign_to_facilitators(request):
         contract_id = request.data.get("contract_id")
         selected_facilitator_ids = request.data.get("selectedFacilitators")
 
-        contract = ProjectContract.objects.get(id=contract_id)
+        contract = Template.objects.get(id=contract_id)
         for facilitator_id in selected_facilitator_ids:
             facilitator = Facilitator.objects.get(id=facilitator_id)
 
@@ -13140,10 +13152,10 @@ def assign_to_facilitators(request):
             )
 
             if facilitator_contract:
-                facilitator_contract.update(is_archive=True) 
+                facilitator_contract.update(is_archive=True)
 
             new_facilitator_contract = FacilitatorContract.objects.create(
-                project_contract=contract, facilitator=facilitator, status="pending"
+                template=contract, facilitator=facilitator, status="pending"
             )
 
         return Response({"message": "Contract Assigned Successfully."}, status=201)
@@ -13171,9 +13183,8 @@ def get_all_facilitators_contracts(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "curriculum", "facilitator")])
 def get_contract_of_facilitator(request, facilitator_id):
     try:
-
         facilitator_contract = FacilitatorContract.objects.filter(
-            facilitator__id=facilitator_id  , is_archive=False
+            facilitator__id=facilitator_id, is_archive=False
         ).first()
 
         serializer = FacilitatorContractSerializer(facilitator_contract)
@@ -13189,7 +13200,7 @@ def get_contract_of_facilitator(request, facilitator_id):
 def get_contract_of_all_facilitator(request):
     try:
 
-        facilitator_contract = FacilitatorContract.objects.all()
+        facilitator_contract = FacilitatorContract.objects.all().order_by("-created_at")
 
         serializer = FacilitatorContractSerializer(facilitator_contract, many=True)
 
