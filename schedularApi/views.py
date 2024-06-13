@@ -383,6 +383,7 @@ def create_project_schedular(request):
             nudges=project_details["nudges"],
             pre_assessment=project_details["pre_assessment"],
             post_assessment=project_details["post_assessment"],
+            is_ngo_project=project_details["is_ngo_project"],
             is_finance_enabled=project_details["finance"],
             teams_enabled=project_details["teams_enabled"],
             project_type=project_details["project_type"],
@@ -5056,6 +5057,7 @@ def edit_schedular_project(request, project_id):
             project.nudges = project_details.get("nudges")
             project.pre_assessment = project_details.get("pre_assessment")
             project.post_assessment = project_details.get("post_assessment")
+            project.is_ngo_project = project_details.get("is_ngo_project")
             project.is_finance_enabled = project_details.get("finance")
             project.junior_pmo = junior_pmo
             project.teams_enabled = request.data.get("teams_enabled")
@@ -9265,41 +9267,43 @@ def new_graph(request, batch_id, competency_id, behavior_id):
                 created_at__gte=date,
                 created_at__lte=date_range[outer_index + 1],
             )
-            for inner_index in range(outer_index, len(graph_data)):
-                movements = []
-                for action_item in filtered_action_items:
-                    movement = 0
-                    initial_status = action_item.initial_status
-                    latest_status = None
-                    for update in action_item.status_updates:
-                        update_date = datetime.strptime(
-                            update["updated_at"], "%Y-%m-%d %H:%M:%S.%f+00:00"
-                        ).date()
-                        if update_date <= date_range[inner_index]:
-                            latest_status = update["status"]
-                        else:
-                            break  # Break the loop if update date is after the mapped date
-                    if latest_status:
-                        movement = (
-                            status_choices_dict[latest_status]
-                            - status_choices_dict[initial_status]
-                        )
-                        movements.append(movement)
-                average = (
-                    round((sum(movements) / len(movements)) / 4 * 100, 0)
-                    if movements
-                    else 0
-                )
-                if inner_index == outer_index:
-                    graph_data[inner_index][
-                        f"{filtered_action_items.count()} Actions created on "
-                        + (date_range[outer_index]).strftime("%d/%m/%y")
-                    ] = 0
-                if (inner_index + 1) <= last_index:
-                    graph_data[inner_index + 1][
-                        f"{filtered_action_items.count()} Actions created on "
-                        + (date_range[outer_index]).strftime("%d/%m/%y")
-                    ] = average
+            if filtered_action_items.count() > 0:
+                for inner_index in range(outer_index, len(graph_data)):
+                    movements = []
+                    for action_item in filtered_action_items:
+                        movement = 0
+                        initial_status = action_item.initial_status
+                        latest_status = None
+                        for update in action_item.status_updates:
+                            update_date = datetime.strptime(
+                                update["updated_at"], "%Y-%m-%d %H:%M:%S.%f+00:00"
+                            ).date()
+                            if update_date <= date_range[inner_index]:
+                                latest_status = update["status"]
+                            else:
+                                break  # Break the loop if update date is after the mapped date
+                        if latest_status:
+                            movement = (
+                                status_choices_dict[latest_status]
+                                - status_choices_dict[initial_status]
+                            )
+                            movements.append(movement)
+                    average = (
+                        round((sum(movements) / len(movements)) / 4 * 100, 0)
+                        if movements
+                        else 0
+                    )
+                    if inner_index == outer_index:
+                        graph_data[inner_index][
+                            f"{filtered_action_items.count()} Actions created on "
+                            + (date_range[outer_index]).strftime("%d/%m/%y")
+                        ] = 0
+                    if (inner_index + 1) <= last_index:
+                        graph_data[inner_index + 1][
+                            f"{filtered_action_items.count()} Actions created on "
+                            + (date_range[outer_index]).strftime("%d/%m/%y")
+                        ] = average
+
     return Response({"graph_data": graph_data})
 
 
