@@ -1163,6 +1163,9 @@ FIELD_NAME_VALUES = {
     "product_type": "Product Type",
     "category": "Category",
     "asset_location": "Location",
+    "coaching_type":"Coaching Type",
+    "credentials_feels_like":"Credential Feels Like",
+    "competency":"Competency"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -2273,6 +2276,10 @@ def add_coach(request):
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     ctt_nctt = json.loads(request.data["ctt_nctt"])
+    competency = json.loads(request.data['competency'])
+    credentials_feels_like = request.data['credentials_feels_like']
+    coaching_type =request.data['coaching_type']
+    intro_summary = request.data.get("intro_summary", "")
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
     username = (
@@ -2385,6 +2392,10 @@ def add_coach(request):
                 is_coach=is_coach,
                 is_mentor=is_mentor,
                 is_consultant=is_consultant,
+                intro_summary=intro_summary,
+                competency=competency,
+                credentials_feels_like=credentials_feels_like,
+                coaching_type=coaching_type
             )
 
             # Approve coach
