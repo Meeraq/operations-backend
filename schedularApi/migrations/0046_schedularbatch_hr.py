@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('api', '0071_coach_coaching_type_coach_competency_and_more'),
-        ('schedularApi', '0045_schedularbatch_hr_schedularproject_is_ngo_project'),
+        ('schedularApi', '0045_schedularproject_is_ngo_project'),
     ]
 
     operations = [
