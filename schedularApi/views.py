@@ -3158,7 +3158,7 @@ def schedule_session_fixed(request):
                         ]
                     create_outlook_calendar_invite(
                         f"Meeraq - {session_type_value.capitalize()} Session",
-                        f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
+                        f"Your {session_type_value} session for the Project: {coaching_session.batch.project.name}, Organisation: {coaching_session.batch.project.organisation.name} has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
                         coach_availability.start_time,
                         coach_availability.end_time,
                         attendees,
@@ -3177,6 +3177,8 @@ def schedule_session_fixed(request):
                             "date": date_for_mail,
                             "time": session_time,
                             "booking_id": booking_id,
+                            "project_name":coaching_session.batch.project.name,
+                            "organisation":coaching_session.batch.project.organisation.name,
                         },
                         [],
                     )
@@ -7155,17 +7157,18 @@ def get_project_wise_progress_data(request, project_id):
                                 learner__id=participant.id,
                             ).first()
                             if schedular_session:
+                                
                                 temp[
                                     f"{session_type} {schedular_session.coaching_session.coaching_session_number}"
                                 ] = (
-                                    "Yes"
+                                    "Completed"
                                     if schedular_session.status == "completed"
-                                    else "No"
+                                    else "Booked"
                                 )
                             else:
                                 temp[
                                     f"{session_type} {coaching_session.coaching_session_number}"
-                                ] = "No"
+                                ] = "Not booked"
                         else:
                             temp[f"{session_type} {session['order']}"] = "No"
 

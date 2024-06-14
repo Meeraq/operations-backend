@@ -1,8 +1,15 @@
 from django.db import models
 from django.utils import timezone
-from api.models import Profile, validate_pdf_extension, Project,Engagement, Coach, Facilitator
+from api.models import (
+    Profile,
+    validate_pdf_extension,
+    Project,
+    Engagement,
+    Coach,
+    Facilitator,
+)
 from django.contrib.auth.models import User
-from schedularApi.models import SchedularProject,GmSheet
+from schedularApi.models import SchedularProject, GmSheet
 
 # Create your models here.
 
@@ -19,7 +26,6 @@ class Vendor(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     active_inactive = models.BooleanField(default=True)
     is_msme = models.BooleanField(default=None, null=True, blank=True)
-
 
     def __str__(self):
         return self.name
@@ -666,7 +672,9 @@ class SalesOrder(models.Model):
         ZohoCustomer, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
     so_line_items = models.ManyToManyField(SalesOrderLineItem, blank=True)
-    gm_sheet = models.ForeignKey(GmSheet,on_delete=models.SET_NULL, blank=True, null=True, default=None)
+    gm_sheet = models.ForeignKey(
+        GmSheet, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
     salesorder_id = models.CharField(max_length=100, blank=True, null=True)
     documents = models.JSONField(default=list, blank=True, null=True)
     crm_owner_id = models.CharField(max_length=100, blank=True, null=True)
@@ -1448,9 +1456,7 @@ class PurchaseOrder(models.Model):
     caas_project = models.ForeignKey(
         Project, on_delete=models.SET_NULL, blank=True, null=True
     )
-    coach = models.ForeignKey(
-        Coach, on_delete=models.SET_NULL, blank=True, null=True
-    )
+    coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, blank=True, null=True)
     facilitator = models.ForeignKey(
         Facilitator, on_delete=models.SET_NULL, blank=True, null=True
     )
@@ -1611,13 +1617,13 @@ class PurchaseOrder(models.Model):
     salesorders = models.JSONField(default=list, null=True, blank=True)
     bills = models.JSONField(default=list, null=True, blank=True)
     is_guest_ctt = models.BooleanField(default=False)
+    po_type = models.CharField(max_length=225, null=True, blank=True)
 
     class Meta:
         ordering = ["-created_time"]
 
     def __str__(self):
         return self.purchaseorder_number
-    
 
 
 class BillLineItem(models.Model):
