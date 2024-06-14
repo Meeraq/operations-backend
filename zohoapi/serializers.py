@@ -121,7 +121,7 @@ class SalesOrderGetSerializer(serializers.ModelSerializer):
     cf_invoicing_type = serializers.SerializerMethodField()
     cf_ctt_batch = serializers.SerializerMethodField()
     gm_sheet_number = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = SalesOrder
         fields = [
@@ -141,7 +141,8 @@ class SalesOrderGetSerializer(serializers.ModelSerializer):
             "created_date",
             "total",
             "currency_code",
-            "gm_sheet_number"
+            "gm_sheet_number",
+            "salesperson_name",
         ]
 
     def get_cf_invoicing_type(self, obj):
@@ -151,7 +152,7 @@ class SalesOrderGetSerializer(serializers.ModelSerializer):
     def get_cf_ctt_batch(self, obj):
         # Implement logic to compute the first custom field value based on obj
         return obj.custom_field_hash.get("cf_ctt_batch", "")
-    
+
     def get_gm_sheet_number(self, obj):
         # Implement logic to compute the first custom field value based on obj
         return obj.gm_sheet.gmsheet_number if obj.gm_sheet else None
@@ -194,6 +195,7 @@ class PurchaseOrderGetSerializer(serializers.ModelSerializer):
             "salesorder_id",
             "total",
             "tax_total",
+            "po_type",
         ]
 
     def get_cf_invoice_approver_s_email(self, obj):

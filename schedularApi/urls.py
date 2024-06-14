@@ -513,4 +513,7 @@ urlpatterns = [
         views.new_graph,
     ),
     path("get-booking-id-of-session/", views.get_booking_id_of_session),
+    path("batch/<int:batch_id>/add_hr/", views.add_hr_to_batch, name="add_hr_to_batch"),
+    path("batch/<int:batch_id>/hrs/", views.get_hrs_of_batch, name="get_hrs_of_batch"),
+    path('organisation/<int:organisation_id>/hrs/', views.get_hrs_of_organisation, name='get_hrs_of_organisation'),
 ]

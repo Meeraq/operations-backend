@@ -12,7 +12,11 @@ from zohoapi.tasks import (
 from zohoapi.models import SalesOrder
 from collections import defaultdict
 from django.utils import timezone
-from .serializers import BatchSerializer, FacultiesSerializer
+from .serializers import (
+    BatchSerializer,
+    FacultiesSerializer,
+    SessionsSerializerDepthOne,
+)
 from .models import (
     Batches,
     BatchUsers,
@@ -44,6 +48,7 @@ from django.db.models import (
 
 from zohoapi.models import InvoiceData, Vendor, ZohoVendor
 from zohoapi.views import fetch_invoices_db
+from courses.models import CttSessionAttendance
 
 
 def get_month_start_end_dates():
@@ -715,8 +720,9 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
 @permission_classes([IsAuthenticated])
 def get_participants_of_that_batch(request, batch_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").filter(batch_id=batch_id)
+        batch_users = BatchUsers.objects.using("ctt").filter(batch__id=batch_id, deleted_at__isnull=False)
         data = []
+        print(batch_users,batch_users.count(),batch_id)
         index = 1
         for batch_user in batch_users:
             batch_name = batch_user.batch.name
@@ -753,6 +759,7 @@ def get_participants_of_that_batch(request, batch_id):
 
             user_data = {
                 "index": index,
+                "batch_user_id": batch_user.id,
                 "name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
                 "email": batch_user.user.email,
                 "phone_number": batch_user.user.phone,
@@ -903,17 +910,22 @@ def get_all_ctt_faculties(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_the_profitability_of_a_batch(request, batch_id):
     try:
         batch_user = Batches.objects.using("ctt").get(id=batch_id)
-        salesorders = SalesOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.name)
-        purchase_orders = PurchaseOrder.objects.filter(custom_field_hash__cf_ctt_batch=batch_user.name)
-        
-        total = Decimal('0.0')
-        invoiced_amount = Decimal('0.0')
-        paid_amount = Decimal('0.0')
+        salesorders = SalesOrder.objects.filter(
+            custom_field_hash__cf_ctt_batch=batch_user.name
+        )
+        purchase_orders = PurchaseOrder.objects.filter(
+            custom_field_hash__cf_ctt_batch=batch_user.name
+        )
+
+        total = Decimal("0.0")
+        invoiced_amount = Decimal("0.0")
+        paid_amount = Decimal("0.0")
         currency_code = None
         all_invoices_paid = []
 
@@ -922,25 +934,31 @@ def get_the_profitability_of_a_batch(request, batch_id):
                 total += Decimal(str(sales_order.total)) * sales_order.exchange_rate
                 currency_code = sales_order.currency_code
                 for invoice in sales_order.invoices:
-                    invoiced_amount += Decimal(str(invoice["total"])) * sales_order.exchange_rate
+                    invoiced_amount += (
+                        Decimal(str(invoice["total"])) * sales_order.exchange_rate
+                    )
                     if invoice["status"] == "paid":
                         paid_amount += Decimal(str(invoice["total"]))
                         all_invoices_paid.append(True)
                     else:
                         all_invoices_paid.append(False)
 
-        purchase_total = Decimal('0.0')
-        purchase_billed_amount = Decimal('0.0')
-        purchase_paid_amount = Decimal('0.0')
+        purchase_total = Decimal("0.0")
+        purchase_billed_amount = Decimal("0.0")
+        purchase_paid_amount = Decimal("0.0")
         purchase_currency_code = None
         purchase_all_bills_paid = []
 
         if purchase_orders.exists():
             for purchase_order in purchase_orders:
-                purchase_total += Decimal(str(purchase_order.total))* purchase_order.exchange_rate
+                purchase_total += (
+                    Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
+                )
                 purchase_currency_code = purchase_order.currency_code
                 for bill in purchase_order.bills:
-                    purchase_billed_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                    purchase_billed_amount += (
+                        Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                    )
                     if bill["status"] == "paid":
                         purchase_paid_amount += Decimal(str(bill["total"]))
                         purchase_all_bills_paid.append(True)
@@ -957,12 +975,158 @@ def get_the_profitability_of_a_batch(request, batch_id):
             "currency_code": currency_code,
             "purchase_currency_code": purchase_currency_code,
             "all_invoices_paid": all_invoices_paid,
-            "purchase_all_bills_paid": purchase_all_bills_paid
+            "purchase_all_bills_paid": purchase_all_bills_paid,
         }
         return Response(response_data, status=status.HTTP_200_OK)
 
     except BatchUsers.DoesNotExist:
-        return Response({"error": "Batch user not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"error": "Batch user not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_sessions(request):
+    try:
+        batch_id = request.query_params.get("batch_id")
+        now = datetime.now()
+        upcoming_sessions = (
+            Sessions.objects.using("ctt")
+            .filter(start_time__gte=now, date__gte=now.date())
+            .order_by("date", "start_time")
+        )
+
+        if batch_id:
+            upcoming_sessions = upcoming_sessions.filter(
+                batch__id=int(batch_id)
+            ).order_by("date", "start_time")
+
+        all_sessions = []
+        for session in upcoming_sessions:
+            session_attendance = CttSessionAttendance.objects.filter(
+                session=session.id
+            ).first()
+            user_names = None
+            if session_attendance:
+                users = (
+                    Users.objects.using("ctt")
+                    .filter(batchusers__id__in=session_attendance.attendance)
+                    .distinct()
+                )
+                user_names = [user.first_name + " " + user.last_name for user in users]
+            all_sessions.append(
+                {
+                    "id": session.id,
+                    "batch_name": session.batch.name,
+                    "batch_id": session.batch.id,
+                    "program_name": session.batch.program.name,
+                    "date": session.date,
+                    "start_time": session.start_time,
+                    "end_time": session.end_time,
+                    "session_no": session.session_no,
+                    "description": session.description,
+                    "type": session.type,
+                    "session_attendance": (user_names if user_names else []),
+                }
+            )
+
+        return Response(all_sessions)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_past_sessions(request):
+    try:
+        batch_id = request.query_params.get("batch_id")
+        now = datetime.now()
+        past_sessions = (
+            Sessions.objects.using("ctt")
+            .filter(end_time__lte=now, date__lte=now.date())
+            .order_by("-date", "-start_time")
+        )
+
+        if batch_id:
+            past_sessions = past_sessions.filter(batch__id=int(batch_id)).order_by(
+                "-date", "-start_time"
+            )
+
+        all_sessions = []
+
+        for session in past_sessions:
+            session_attendance = CttSessionAttendance.objects.filter(
+                session=session.id
+            ).first()
+            user_names = None
+            if session_attendance:
+                users = (
+                    Users.objects.using("ctt")
+                    .filter(batchusers__id__in=session_attendance.attendance)
+                    .distinct()
+                )
+                user_names = [user.first_name + " " + user.last_name for user in users]
+            all_sessions.append(
+                {
+                    "id": session.id,
+                    "batch_name": session.batch.name,
+                    "batch_id": session.batch.id,
+                    "program_name": session.batch.program.name,
+                    "date": session.date,
+                    "start_time": session.start_time,
+                    "end_time": session.end_time,
+                    "session_no": session.session_no,
+                    "description": session.description,
+                    "type": session.type,
+                    "session_attendance": (user_names if user_names else []),
+                }
+            )
+
+        return Response(all_sessions)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_attendance_of_session(request):
+    try:
+        participants = request.data.get("participants", [])
+        session = request.data.get("session")
+
+        existing_session_attendance, created = (
+            CttSessionAttendance.objects.get_or_create(session=session)
+        )
+
+        existing_session_attendance.attendance = participants
+
+        existing_session_attendance.save()
+
+        return Response({"message": "Attendance Added Successfully!"}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add attendance"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_attendance_of_session(request, session_id):
+    try:
+        session_attendance = CttSessionAttendance.objects.get(session=session_id)
+
+        return Response(
+            {
+                "session": session_attendance.session,
+                "attendance": session_attendance.attendance,
+            }
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)

@@ -122,6 +122,7 @@ from assessmentApi.models import (
     Competency,
     Behavior,
 )
+
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
 import random
@@ -607,7 +608,9 @@ def create_new_nudge(request):
         nudge_instance.is_switched_on = True
         nudge_instance.unique_id = uuid.uuid4()
         nudge_instance.save()
-        nudge_resource = NudgeResources.objects.filter(id=nudge_instance.nudge_resources.id).first()
+        nudge_resource = NudgeResources.objects.filter(
+            id=nudge_instance.nudge_resources.id
+        ).first()
         if nudge_resource:
             nudge_instance.file = nudge_resource.file
             nudge_instance.save()
@@ -2191,7 +2194,9 @@ def get_all_courses_progress(request):
     courses = Course.objects.filter(status="public")
     hr_id = request.query_params.get("hr", None)
     if hr_id:
-        courses = courses.filter(batch__project__hr__id=hr_id)
+        courses = courses.filter(
+            Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
+        ).distinct()
     for course in courses:
         course_serializer = CourseSerializer(course)
         lessons = Lesson.objects.filter(status="public", course=course)
@@ -2303,7 +2308,10 @@ def get_all_quizes_report(request):
     )
     hr_id = request.query_params.get("hr", None)
     if hr_id:
-        quizes = quizes.filter(lesson__course__batch__project__hr__id=hr_id)
+        quizes = quizes.filter(
+            Q(lesson__course__batch__project__hr__id=hr_id)
+            | Q(lesson__course__batch__hr__id=hr_id)
+        ).distinct()
     for quiz in quizes:
         course_enrollments = CourseEnrollment.objects.filter(course=quiz.lesson.course)
         total_participants = course_enrollments.count()
@@ -4017,8 +4025,9 @@ class GetAllNudgesOfSchedularProjects(APIView):
                 )
             if hr_id:
                 nudges = nudges.filter(
-                    batch__project__hr__id=hr_id, is_switched_on=True
-                )
+                    Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id),
+                    is_switched_on=True,
+                ).distinct()
             data = NudgeSerializer(nudges, many=True).data
             return Response(data)
         except Exception as e:
