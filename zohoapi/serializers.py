@@ -142,7 +142,8 @@ class SalesOrderGetSerializer(serializers.ModelSerializer):
             "total",
             "currency_code",
             "gm_sheet_number",
-            "salesperson_name"
+            "salesperson_name",
+            "sub_total"
         ]
 
     def get_cf_invoicing_type(self, obj):
