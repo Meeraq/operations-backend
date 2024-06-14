@@ -1163,6 +1163,9 @@ FIELD_NAME_VALUES = {
     "product_type": "Product Type",
     "category": "Category",
     "asset_location": "Location",
+    "coaching_type":"Coaching Type",
+    "credentials_feels_like":"Credential Feels Like",
+    "competency":"Competency"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -1831,6 +1834,7 @@ def create_project_cass(request):
                 calendar_invites=request.data["calendar_invites"],
                 finance=request.data["finance"],
                 is_project_structure=request.data["is_project_structure"],
+                is_ngo_project=request.data["is_ngo_project"],
                 total_credits=total_credits_in_minutes,
                 duration_of_each_session=duration_of_each_session,
                 request_expiry_time=request_expiry_time_in_minutes,
@@ -2276,6 +2280,10 @@ def add_coach(request):
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     ctt_nctt = json.loads(request.data["ctt_nctt"])
+    competency = json.loads(request.data['competency'])
+    credentials_feels_like = request.data['credentials_feels_like']
+    coaching_type =request.data['coaching_type']
+    intro_summary = request.data.get("intro_summary", "")
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
     username = (
@@ -2388,6 +2396,10 @@ def add_coach(request):
                 is_coach=is_coach,
                 is_mentor=is_mentor,
                 is_consultant=is_consultant,
+                intro_summary=intro_summary,
+                competency=competency,
+                credentials_feels_like=credentials_feels_like,
+                coaching_type=coaching_type
             )
 
             # Approve coach
@@ -5302,14 +5314,17 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 engagement[0].coach.first_name + " " + engagement[0].coach.last_name
             )
             coach_email = engagement[0].coach.email
+            coach_phone = engagement[0].coach.phone
             coach = CoachSerializer(engagement[0].coach).data
         else:
             coach = None
             coach_name = None
             coach_email = None
+            coach_phone = None
         learner = LearnerSerializer(session_request.learner).data
         learner_name = session_request.learner.name
         learner_email = session_request.learner.email
+        learner_phone = session_request.learner.phone,
         session_type = session_request.session_type
         session_number = session_request.session_number
         billable_session_number = session_request.billable_session_number
@@ -5334,9 +5349,11 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "organisation": organisation,
                 "coach_name": coach_name,
                 "coach_email": coach_email,
+                "coach_phone": coach_phone, 
                 "learner": learner,
                 "learner_name": learner_name,
                 "learner_email": learner_email,
+                "learner_phone": learner_phone,
                 "session_type": session_type,
                 "session_number": session_number,
                 "billable_session_number": billable_session_number,
@@ -5368,9 +5385,11 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             + schedular_session.availibility.coach.last_name
         )
         coach_email = schedular_session.availibility.coach.email
+        coach_phone = schedular_session.availibility.coach.phone
         learner = LearnerSerializer(schedular_session.learner).data
         learner_name = schedular_session.learner.name
         learner_email = schedular_session.learner.email
+        learner_phone = schedular_session.learner.phone
         session_type = schedular_session.coaching_session.session_type
         session_number = schedular_session.coaching_session.coaching_session_number
         billable_session_number = None
@@ -5390,9 +5409,11 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "organisation": organisation,
                 "coach_name": coach_name,
                 "coach_email": coach_email,
+                "coach_phone": coach_phone,
                 "learner": learner,
                 "learner_name": learner_name,
                 "learner_email": learner_email,
+                "learner_phone":learner_phone,
                 "session_type": session_type,
                 "session_number": session_number,
                 "billable_session_number": billable_session_number,
@@ -8534,6 +8555,9 @@ def edit_project_caas(request, project_id):
             )
             project.post_assessment = request.data.get(
                 "post_assessment", project.post_assessment
+            )
+            project.is_ngo_project = request.data.get(
+                "is_ngo_project", project.is_ngo_project
             )
             project.nudges = request.data.get("nudges", project.nudges)
 

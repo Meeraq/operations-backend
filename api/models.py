@@ -299,6 +299,9 @@ class Coach(models.Model):
     min_fees = models.CharField(max_length=120, blank=True)
     fee_remark = models.TextField(blank=True)
     job_roles = models.JSONField(default=list, blank=True)
+    competency = models.JSONField(default=list, blank=True)
+    credentials_feels_like = models.CharField(max_length=100, blank=True)
+    coaching_type=models.CharField(max_length=100, blank=True)
     coaching_hours = models.CharField(max_length=50, blank=True)
     created_at = models.DateField(auto_now_add=True)
     edited_at = models.DateField(auto_now=True)
@@ -319,6 +322,7 @@ class Coach(models.Model):
         null=True,
         validators=[validate_pdf_extension],
     )
+    intro_summary = models.TextField(blank=True)
     remark = models.TextField(blank=True)
     is_coach = models.BooleanField(blank=True, default=False)
     is_mentor = models.BooleanField(blank=True, default=False)
@@ -510,6 +514,7 @@ class Project(models.Model):
     nudge_periodic_task = models.ForeignKey(
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
+    is_ngo_project = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -790,8 +795,10 @@ class StandardizedField(models.Model):
         ("category","Category"),
         ("asset_location","Location"),
         ("project_type","Project Type"),
+        ("credentials_feels_like","Credential Feels like"),
+        ("competency","Competency"),
+        ("coaching_type","Coaching Type"),
     )
-
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
     values = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
