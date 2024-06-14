@@ -6,16 +6,11 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0071_coach_coaching_type_coach_competency_and_more'),
         ('schedularApi', '0044_remove_facilitatorcontract_project_contract_and_more'),
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='schedularbatch',
-            name='hr',
-            field=models.ManyToManyField(blank=True, to='api.hr'),
-        ),
+       
         migrations.AddField(
             model_name='schedularproject',
             name='is_ngo_project',
