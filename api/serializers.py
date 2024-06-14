@@ -211,6 +211,12 @@ class HrSerializer(serializers.ModelSerializer):
         depth = 1
 
 
+
+class HrNoDepthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HR
+        fields = "__all__"
+
 class OrganisationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organisation

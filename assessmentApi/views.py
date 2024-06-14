@@ -4322,8 +4322,8 @@ class GetAllAssessments(APIView):
         assessments = []
         if hr_id:
             assessments = Assessment.objects.filter(
-                Q(hr__id=int(hr_id)), Q(status="ongoing") | Q(status="completed")
-            )
+                Q(hr__id=int(hr_id)) | Q(assessment_modal__lesson__course__batch__hr__id=int(hr_id)), Q(status="ongoing") | Q(status="completed")
+            ).distinct()
         elif pmo and pmo.sub_role == "junior_pmo":
             assessments = Assessment.objects.filter(
                 assessment_modal__lesson__course__batch__project__junior_pmo=pmo
@@ -4401,19 +4401,10 @@ class GetAssessmentsOfHr(APIView):
 
     def get(self, request, hr_id):
         assessments = Assessment.objects.filter(
-            Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
-        ).order_by("-created_at")
+            Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id), Q(status="ongoing") | Q(status="completed")
+        ).order_by("-created_at").distinct()
         assessment_list = []
         for assessment in assessments:
-            assessment_lesson = AssessmentLesson.objects.filter(
-                assessment_modal=assessment
-            ).first()
-            if assessment_lesson:
-                batch = assessment_lesson.lesson.course.batch.name
-                project = assessment_lesson.lesson.course.batch.project.name
-            else:
-                batch = "N/A"
-                project = "N/A"
             total_responses_count = ParticipantResponse.objects.filter(
                 assessment=assessment
             ).count()
@@ -4954,8 +4945,11 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
                 schedular_projects = SchedularProject.objects.filter(id=int(project_id))
             if hr_id:
                 schedular_projects = schedular_projects.filter(hr__id=hr_id)
+
             for schedular_project in schedular_projects:
                 batches = SchedularBatch.objects.filter(project=schedular_project)
+                if hr_id:
+                    batches  = batches.filter(Q(project__hr__id=hr_id)| Q(hr__id=hr_id)).distinct()
 
                 for batch in batches:
                     assessments = Assessment.objects.filter(
