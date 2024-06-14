@@ -720,8 +720,9 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
 @permission_classes([IsAuthenticated])
 def get_participants_of_that_batch(request, batch_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").filter(batch_id=batch_id)
+        batch_users = BatchUsers.objects.using("ctt").filter(batch__id=batch_id, deleted_at__isnull=False)
         data = []
+        print(batch_users,batch_users.count(),batch_id)
         index = 1
         for batch_user in batch_users:
             batch_name = batch_user.batch.name
