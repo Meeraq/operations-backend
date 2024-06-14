@@ -5580,7 +5580,7 @@ def get_upcoming_session_of_user(user_type, user_id, project_id):
         )
         schedular_sessions = SchedularSessions.objects.filter(
             Q(coaching_session__batch__project__hr__id=user_id)
-            | Q(batch__project__hr__id=user_id)
+            | Q(coaching_session__batch__hr__id=user_id)
         ).distinct()
         available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
