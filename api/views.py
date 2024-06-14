@@ -2159,7 +2159,9 @@ def get_projects_of_learner(request, learner_id):
 @permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
-    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    schedular_projects = SchedularProject.objects.filter(
+        Q(hr__id=hr_id) | Q(schedularbatch__hr__id=hr_id)
+    ).distinct()
     schedular_project_serializer = SchedularProjectSerializer(
         schedular_projects, many=True
     )
@@ -2176,8 +2178,9 @@ def get_ongoing_projects_of_hr(request, hr_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_schedular_projects_of_hr(request, hr_id):
-
-    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    schedular_projects = SchedularProject.objects.filter(
+        Q(hr__id=hr_id) | Q(schedularbatch__hr__id=hr_id)
+    ).distinct()
     serializer = SchedularProjectSerializer(schedular_projects, many=True)
     return Response(serializer.data, status=200)
 
@@ -2637,7 +2640,10 @@ def get_user_data(user):
             return None
         serializer = HrDepthOneSerializer(user.profile.hr)
         is_caas_allowed = Project.objects.filter(hr=user.profile.hr).exists()
-        is_seeq_allowed = SchedularProject.objects.filter(hr=user.profile.hr).exists()
+        is_seeq_allowed = (
+            SchedularProject.objects.filter(hr=user.profile.hr).exists()
+            or SchedularBatch.objects.filter(hr=user.profile.hr).exists()
+        )
         return {
             **serializer.data,
             "roles": roles,
@@ -5275,8 +5281,9 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             project__hr__id=user_id,
         )
         schedular_sessions = SchedularSessions.objects.filter(
-            coaching_session__batch__project__hr__id=user_id
-        )
+            Q(coaching_session__batch__project__hr__id=user_id)
+            | Q(coaching_session__batch__hr__id=user_id)
+        ).distinct()
     res = []
     for session_request in session_requests:
         project_name = session_request.project.name
@@ -5551,8 +5558,9 @@ def get_upcoming_session_of_user(user_type, user_id, project_id):
             ~Q(status="completed"),
         )
         schedular_sessions = SchedularSessions.objects.filter(
-            coaching_session__batch__project__hr__id=user_id
-        )
+            Q(coaching_session__batch__project__hr__id=user_id)
+            | Q(batch__project__hr__id=user_id)
+        ).distinct()
         available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
@@ -5783,8 +5791,9 @@ def past_sessions_of_user(user_type, user_id, project_id=None):
             Q(is_archive=False),
         )
         schedular_sessions = SchedularSessions.objects.filter(
-            coaching_session__batch__project__hr__id=user_id
-        )
+            Q(coaching_session__batch__project__hr__id=user_id)
+            | Q(coaching_session__batch__hr__id=user_id)
+        ).distinct()
         avaliable_sessions = schedular_sessions.filter(
             availibility__end_time__lt=timestamp_milliseconds
         )
@@ -6047,6 +6056,7 @@ def get_learner_of_user_optimized(request, user_type, user_id):
             learners = Learner.objects.filter(
                 Q(engagement__project__hr__id=user_id)
                 | Q(schedularbatch__project__hr__id=user_id)
+                | Q(schedularbatch__hr__id=user_id)
             ).distinct()
 
         serializer = LearnerSerializer(learners, many=True)
@@ -6085,6 +6095,7 @@ def get_learner_course_enrolled_of_user_optimized(request, user_type, user_id):
             learners = Learner.objects.filter(
                 Q(engagement__project__hr__id=user_id)
                 | Q(schedularbatch__project__hr__id=user_id)
+                | Q(schedularbatch__hr__id=user_id)
             ).distinct()
 
         for learner in learners:
@@ -6119,6 +6130,7 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
             learners = Learner.objects.filter(
                 Q(engagement__project__hr__id=user_id)
                 | Q(schedularbatch__project__hr__id=user_id)
+                | Q(schedularbatch__hr__id=user_id)
             ).distinct()
 
         for learner in learners:
@@ -6138,8 +6150,9 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
                     Q(engagement__learner=learner) & Q(hr__id=user_id)
                 )
                 schedular_batches = SchedularBatch.objects.filter(
-                    Q(learners__email=learner.email) & Q(project__hr__id=user_id)
-                )
+                    Q(learners__email=learner.email)
+                    & Q(Q(project__hr__id=user_id) | Q(hr__id=user_id))
+                ).distinct()
 
             learner_dict_organisation[learner.id] = set()
             learner_dict_project[learner.id] = []
@@ -10792,7 +10805,9 @@ def get_skill_training_projects(request):
     hr_id = request.query_params.get("hr", None)
     projects = SchedularProject.objects.all()
     if hr_id:
-        projects = projects.filter(hr__id=hr_id)
+        projects = projects.filter(
+            Q(hr__id=hr_id) | Q(schedularbatch__hr__id=hr_id)
+        ).distinct()
     project_serializer = SchedularProjectSerializer(projects, many=True)
 
     # Modify the reminder status directly in the serialized data

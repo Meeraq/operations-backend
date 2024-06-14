@@ -82,7 +82,10 @@ class SchedularBatch(models.Model):
     email_reminder = models.BooleanField(blank=True, default=True)
     whatsapp_reminder = models.BooleanField(blank=True, default=True)
     calendar_invites = models.BooleanField(blank=True, default=True)
-
+    hr = models.ManyToManyField(HR, blank=True)
+    
+    def __str__(self):
+        return  f"{self.id} {self.name}" 
 
 class RequestAvailibilty(models.Model):
     request_name = models.CharField(max_length=100, blank=True)

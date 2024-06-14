@@ -139,6 +139,7 @@ from .models import (
     FacilitatorContract,
 )
 from api.serializers import (
+    HrNoDepthSerializer,
     FacilitatorSerializer,
     FacilitatorSerializerIsVendor,
     FacilitatorBasicDetailsSerializer,
@@ -1150,6 +1151,7 @@ def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id = request.query_params.get("pmo")
     coach_id = request.query_params.get("coach_id")
+    hr_id = request.query_params.get("hr_id")
     finance = request.query_params.get("finance")
     projects = None
     if finance:
@@ -1165,6 +1167,11 @@ def get_all_Schedular_Projects(request):
         coach = Coach.objects.get(id=int(coach_id))
         projects = SchedularProject.objects.filter(
             Q(schedularbatch__coaches=coach)
+        ).distinct()
+
+    elif hr_id :
+        projects = SchedularProject.objects.filter(
+            Q(hr__id=hr_id) |  Q(schedularbatch__hr__id=hr_id)
         ).distinct()
     else:
         projects = SchedularProject.objects.all()
@@ -4247,6 +4254,10 @@ def update_session_status(request, session_id):
 def project_batch_wise_report_download(request, project_id, session_to_download):
     project = get_object_or_404(SchedularProject, pk=project_id)
     batches = SchedularBatch.objects.filter(project=project)
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        batches = batches.filter(Q(hr__id=hr_id) | Q(project__hr__id=hr_id)).distinct()
+
     # Create a Pandas DataFrame for each batch
     dfs = []
     for batch in batches:
@@ -4334,6 +4345,10 @@ def project_report_download_live_session_wise(request, project_id, batch_id):
             sessions = LiveSession.objects.filter(batch__project__id=project_id)
         else:
             sessions = LiveSession.objects.filter(batch__id=int(batch_id))
+
+        hr_id = request.query_params.get("hr", None)
+        if hr_id:
+            sessions.filter(Q(batch__hr__id = hr_id) | Q(batch__project__hr__id=hr_id)).distinct()
 
         dfs = {}
 
@@ -4613,7 +4628,7 @@ def get_facilitators(request):
             overall_nps = calculate_nps_from_answers(overall_answer)
             serializer = FacilitatorSerializer(facilitator)
             facilitator_contract = FacilitatorContract.objects.filter(
-                facilitator=facilitator , is_archive=False
+                facilitator=facilitator, is_archive=False
             ).first()
             all_fac.append(
                 {
@@ -5339,7 +5354,7 @@ def get_live_sessions_by_status(request):
             queryset = LiveSession.objects.all()
     hr_id = request.query_params.get("hr", None)
     if hr_id:
-        queryset = queryset.filter(batch__project__hr__id=hr_id)
+        queryset = queryset.filter(Q(batch__project__hr__id=hr_id) |  Q(batch__hr__id=hr_id)).distinct()
 
     facilitator_id = request.query_params.get("facilitator_id", None)
     if facilitator_id:
@@ -6286,28 +6301,30 @@ def get_skill_dashboard_card_data(request, project_id):
             )
             if hr_id:
                 today_sessions = today_sessions.filter(
-                    coaching_session__batch__project__hr__id=hr_id
-                )
+                    Q(coaching_session__batch__project__hr__id=hr_id)  | Q(coaching_session__batch__hr__id=hr_id)
+                ).distinct()
 
             today = timezone.now().date()
             today_live_sessions = LiveSession.objects.filter(date_time__date=today)
 
             if hr_id:
                 today_live_sessions = today_live_sessions.filter(
-                    batch__project__hr__id=hr_id
-                )
+                    Q(batch__project__hr__id=hr_id)  | Q(batch__hr__id = hr_id) 
+                ).distinct()
 
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
+
             if hr_id:
-                ongoing_assessment = ongoing_assessment.filter(hr__id=hr_id)
+                ongoing_assessment = ongoing_assessment.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
+
             if hr_id:
-                completed_assessments = completed_assessments.filter(hr__id=hr_id)
+                completed_assessments = completed_assessments.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
 
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
@@ -6338,26 +6355,36 @@ def get_skill_dashboard_card_data(request, project_id):
                 coaching_session__batch__project__id=int(project_id),
             )
 
+            if hr_id:
+                today_sessions = today_sessions.filter(Q(coaching_session__batch__project__hr__id=hr_id) | Q(coaching_session__batch__hr__id=hr_id)).distinct()
+
             today = timezone.now().date()
             today_live_sessions = LiveSession.objects.filter(
                 date_time__date=today, batch__project__id=int(project_id)
             )
+
+            if hr_id:
+                today_live_sessions = today_live_sessions.filter(Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)).distinct()
+
 
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False,
                 status="ongoing",
                 assessment_modal__lesson__course__batch__project__id=int(project_id),
             )
+
             if hr_id:
-                ongoing_assessment = ongoing_assessment.filter(hr__id=hr_id)
+                ongoing_assessment = ongoing_assessment.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False,
                 status="completed",
                 assessment_modal__lesson__course__batch__project__id=int(project_id),
             )
+
             if hr_id:
-                completed_assessments = completed_assessments.filter(hr__id=hr_id)
+                completed_assessments = completed_assessments.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
                     question__type="rating_0_to_10",
@@ -6503,10 +6530,12 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
+        
         if hr_id:
             schedular_session = schedular_session.filter(
-                coaching_session__batch__project__hr__id=hr_id
-            )
+                Q(coaching_session__batch__project__hr__id=hr_id)
+                | Q(coaching_session__batch__hr__id=hr_id)
+            ).distinct()
 
         upcoming_schedular_sessions = get_coaching_session_according_to_time(
             schedular_session, "upcoming"
@@ -6595,7 +6624,8 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
             )
 
         if hr_id:
-            live_sessions = live_sessions.filter(batch__project__hr__id=hr_id)
+            live_sessions = live_sessions.filter(Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)).distinct()
+            
         upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
 
         upcoming_live_session_data = []
@@ -8921,7 +8951,7 @@ def get_all_action_items(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_action_items_hr(request, hr_id):
-    action_items = ActionItem.objects.filter(batch__project__hr=hr_id)
+    action_items = ActionItem.objects.filter(Q(batch__project__hr=hr_id) | Q(batch__hr=hr_id)).distinct()
     serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
     return Response(serialized_data)
 
@@ -9334,3 +9364,45 @@ def get_booking_id_of_session(request):
         return Response(
             {"error": "Failed to verify the user."}, status=status.HTTP_400_BAD_REQUEST
         )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def add_hr_to_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found."}, status=status.HTTP_404_NOT_FOUND)
+    hr_ids = request.data["hr_ids"]
+    hrs = HR.objects.filter(id__in=hr_ids)
+    if not hrs.exists():
+        return Response(
+            {"error": "No HR found with the provided IDs."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    batch.hr.clear()
+    batch.hr.add(*hrs)
+    batch.save()
+    return Response(
+        {"success": "HRs added to the batch successfully."}, status=status.HTTP_200_OK
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_hrs_of_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found."}, status=status.HTTP_404_NOT_FOUND)
+    hrs = batch.hr.all()
+    serializer = HrNoDepthSerializer(hrs, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_hrs_of_organisation(request, organisation_id):
+    hrs = HR.objects.filter(organisation__id=organisation_id)
+    serializer = HrNoDepthSerializer(hrs, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
