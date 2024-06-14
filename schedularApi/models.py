@@ -163,8 +163,9 @@ class LiveSession(models.Model):
     ]
 
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
-    facilitator = models.ForeignKey(
-        Facilitator, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    facilitator = models.ManyToManyField(
+        Facilitator,
+        blank=True,
     )
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
@@ -296,7 +297,7 @@ class FacilitatorContract(models.Model):
     ]
 
     template = models.ForeignKey(
-        Template, on_delete=models.CASCADE, blank=True,null=True
+        Template, on_delete=models.CASCADE, blank=True, null=True
     )
     name_inputed = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(
@@ -316,6 +317,7 @@ class FacilitatorContract(models.Model):
 
     def __str__(self):
         return f"{self.facilitator.first_name} {self.facilitator.last_name} Contract"
+
 
 class CoachPricing(models.Model):
     SESSION_CHOICES = [
