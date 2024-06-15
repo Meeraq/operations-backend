@@ -490,4 +490,16 @@ urlpatterns = [
         "update-ctt-feedback-status/",
         views.update_ctt_feedback_status,
     ),
+    path(
+        "create_feedback_template/",
+        views.create_feedback_template,
+    ),
+    path(
+        "delete-template/",
+        views.delete_template,
+    ),
+     path(
+        "edit-template/",
+        views.edit_template,
+    ),
 ]
