@@ -499,7 +499,7 @@ urlpatterns = [
         views.delete_template,
     ),
      path(
-        "edit-template/",
+        "edit-template/<int:template_id>/",
         views.edit_template,
     ),
 ]
