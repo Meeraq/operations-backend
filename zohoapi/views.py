@@ -5118,3 +5118,31 @@ def update_vendor_msme(request, vendor_id):
     vendor.is_msme = request.data.get("is_msme", None)
     vendor.save()
     return Response({"message": "MSME status updated successfully!"})
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+def edit_purchase_order(request, po_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{po_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+
+        if response.status_code == 200:
+            purchaseorder_updated = response.json().get("purchaseorder")
+            create_or_update_po(purchaseorder_updated["purchaseorder_id"])
+
+            return Response({"message": "Purchase Order updated successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update purchase order."}, status=500)
