@@ -178,6 +178,12 @@ class QuestionSerializer(serializers.ModelSerializer):
         model = Question
         fields = "__all__"
 
+class FeedbackSerializer(serializers.ModelSerializer):
+    questions = QuestionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Feedback
+        fields = "__all__"
 
 class QuizLessonDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -414,6 +420,11 @@ class FeedbackDepthOneSerializer(serializers.ModelSerializer):
         model = Feedback
         fields = "__all__"
         depth = 1
+        
+class FeedbackDepthOneWithAssignedInSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feedback
+        fields = "__all__"
 
 
 class CourseEnrollmentWithNamesSerializer(serializers.ModelSerializer):
@@ -444,3 +455,13 @@ class CttFeedbackDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = CttFeedback
         fields = "__all__"
+
+
+
+class FeedbackDepthOneWithAssignedInSerializer(serializers.ModelSerializer):
+    cttfeedback_set = CttFeedbackDepthOneSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Feedback
+        fields = "__all__"
+        depth=1
