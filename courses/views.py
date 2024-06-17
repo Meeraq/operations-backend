@@ -59,6 +59,7 @@ from .serializers import (
     LaserSessionSerializerDepthOne,
     LaserCoachingSessionSerializer,
     FeedbackLessonDepthOneSerializer,
+    FeedbackDepthOneWithAssignedInSerializer,
     AssessmentSerializerDepthOne,
     AssessmentSerializer,
     CourseEnrollmentDepthOneSerializer,
@@ -82,6 +83,7 @@ from .serializers import (
     NudgeResourcesSerializerDepthOne,
     NudgeResourcesSerializerDepthOneProjectNames,
     NudgeSerializerDepthOne,
+    FeedbackSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -4283,7 +4285,7 @@ def submit_feedback(request, feedback_id, learner_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach")])
 def get_all_feedback(request):
     feedback = Feedback.objects.all()
-    serializer = FeedbackDepthOneSerializer(feedback, many=True)
+    serializer = FeedbackDepthOneWithAssignedInSerializer(feedback, many=True)
     return Response(serializer.data)
 
 
@@ -4544,7 +4546,7 @@ def create_ctt_feedback(request):
         name = request.data.get("name")
         session_number = request.data.get("session")
         batch_id = request.data.get("batch")
-
+        program = request.data.get("program")
         question_ids = []
         for question in questions:
             options = question.get("options", [])
@@ -4562,6 +4564,7 @@ def create_ctt_feedback(request):
             unique_id=unique_id,
             ctt_batch=batch_id,
             session_number=session_number,
+            program=program,
         )
 
         # Add questions to the CttFeedback instance
@@ -4641,8 +4644,8 @@ def get_ctt_feedback(request):
                 "total_responded": feedback_responses,
                 "total_participant": total_users,
                 "unique_id": ctt_feedback.unique_id,
+                "program":ctt_feedback.program
             }
-
             all_feedback.append(data)
         return Response(all_feedback)
     except Exception as e:
@@ -4728,3 +4731,117 @@ def update_ctt_feedback_status(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update status"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_feedback_template(request):
+    try:
+        questions = request.data.get("questions")
+        name = request.data.get("name")
+
+        question_ids = []
+        for question in questions:
+            options = question.get("options", [])
+            question_instance = Question.objects.create(
+                text=question.get("text"),
+                options=options,
+                type=question.get("type"),
+            )
+            question_ids.append(question_instance.id)
+
+        unique_id = uuid.uuid4()
+
+        feedback = Feedback.objects.create(
+            name=name,
+            unique_id=unique_id,
+        )
+
+        # Add questions to the CttFeedback instance
+        feedback.questions.set(question_ids)
+        feedback.save()
+        return Response({"message": "Feedback created successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create feedback"}, status=500)
+    
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])    
+def edit_template(request, template_id):
+    try:
+        feedback = Feedback.objects.get(id=template_id)
+        
+        name = request.data.get("name", feedback.name)
+        questions = request.data.get("questions", [])
+
+        question_ids = []
+        for question_data in questions:
+            question_id = question_data.get("id")
+            if question_id:
+                question_instance = Question.objects.get(id=question_id)
+                question_instance.text = question_data.get("text", question_instance.text)
+                question_instance.options = question_data.get("options", question_instance.options)
+                question_instance.type = question_data.get("type", question_instance.type)
+                question_instance.save()
+            else:
+                question_instance = Question.objects.create(
+                    text=question_data.get("text"),
+                    options=question_data.get("options", []),
+                    type=question_data.get("type"),
+                )
+            question_ids.append(question_instance.id)
+
+        feedback.name = name
+        feedback.questions.set(question_ids)
+        feedback.save()
+        return Response({"message": "Feedback updated successfully!"}, status=200)
+    except Feedback.DoesNotExist:
+        return Response({"error": "Feedback template does not exist"}, status=404)
+    except Question.DoesNotExist:
+        return Response({"error": "One or more questions do not exist"}, status=404)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update feedback"}, status=500)
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_template(request):
+    try:
+        template_id = request.data.get('template_id')
+        if not template_id:
+            return Response(
+                {"error": "Template ID not provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        template = Feedback.objects.get(id=template_id)
+        template.delete()
+        return Response(
+            {"success": "Template deleted successfully."},
+            status=status.HTTP_200_OK,
+        )
+    except Feedback.DoesNotExist:
+        return Response(
+            {"error": "Template does not exist."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete template."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated])
+# def get_all_feedback(request):
+#     try:
+#         # Retrieve all feedback instances
+#         feedback_instances = Feedback.objects.all()
+        
+#         # Serialize all feedback instances
+#         feedback_serializer = FeedbackSerializer(feedback_instances, many=True)
+        
+#         return Response(feedback_serializer.data, status=200)
+#     except Exception as e:
+#         print(str(e))
+#         return Response({"error": "Failed to retrieve feedback"}, status=500)
