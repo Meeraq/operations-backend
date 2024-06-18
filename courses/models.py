@@ -368,6 +368,12 @@ class CttFeedback(models.Model):
         ("ongoing", "Ongoing"),
         ("completed", "Completed"),
     ]
+    PROGRAM_CHOICES = [
+        ("level-1", "Level-1"),
+        ("level-2", "Level-2"),
+        ("level-3", "Level-3"),
+        ("actc", "ACTC"),
+    ]
     name = models.CharField(max_length=225, blank=True, null=True, default="Feedback")
     questions = models.ManyToManyField(Question)
     unique_id = models.CharField(
@@ -379,6 +385,8 @@ class CttFeedback(models.Model):
     session_number = models.IntegerField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE, blank=True, null=True)
+    program = models.CharField(max_length=255,choices=PROGRAM_CHOICES, default="")
 
 
 class CttFeedbackResponse(models.Model):
