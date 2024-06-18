@@ -1481,7 +1481,7 @@ def get_course_enrollment(request, course_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "curriculum", "coach")])
 def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
