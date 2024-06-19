@@ -1141,6 +1141,39 @@ class ObserverAssessment(APIView):
             )
 
 
+def calculate_quiz_response(participant, assessment):
+    try:
+        try:
+            response = ParticipantResponse.objects.get(
+                participant=participant, assessment=assessment
+            )
+        except ParticipantResponse.DoesNotExist:
+
+            return None
+
+        total_questions = assessment.questionnaire.questions.all()
+        total_questions_count = total_questions.count()
+        correct_answers_count = 0
+        participant_response = response.participant_response
+
+        for key, value in participant_response.items():
+            try:
+                question = total_questions.get(id=key)
+                if str(value) in question.correct_answer:
+                    correct_answers_count += 1
+            except Question.DoesNotExist:
+                continue
+
+        return {
+            "total_questions_count": total_questions_count,
+            "correct_answers_count": correct_answers_count,
+            "passing_percentage": assessment.passing_percentage,
+        }
+    except Exception as e:
+        print(str(e))
+        pass
+
+
 class CreateParticipantResponseView(APIView):
     permission_classes = [AllowAny]
 
@@ -1170,6 +1203,7 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
+
             try:
                 if assessment.assessment_type == "self" and assessment.automated_result:
                     encoded_image = None
@@ -1215,12 +1249,19 @@ class CreateParticipantResponseView(APIView):
             except Exception as e:
                 print(str(e))
 
+            response = {"message": "Submit Successfully."}
+            if assessment.is_quiz:
+                response["quiz_response"] = calculate_quiz_response(
+                    participant, assessment
+                )
+
             return Response(
-                {"message": "Submit Successfully."},
+                response,
                 status=status.HTTP_200_OK,
             )
 
         except Exception as e:
+            print("e", str(e))
             return Response(
                 {"error": "Failed to Submit."}, status=status.HTTP_404_NOT_FOUND
             )
@@ -4337,7 +4378,9 @@ class GetAllAssessments(APIView):
         assessments = []
         if hr_id:
             assessments = Assessment.objects.filter(
-                Q(hr__id=int(hr_id)) | Q(assessment_modal__lesson__course__batch__hr__id=int(hr_id)), Q(status="ongoing") | Q(status="completed")
+                Q(hr__id=int(hr_id))
+                | Q(assessment_modal__lesson__course__batch__hr__id=int(hr_id)),
+                Q(status="ongoing") | Q(status="completed"),
             ).distinct()
         elif pmo and pmo.sub_role == "junior_pmo":
             assessments = Assessment.objects.filter(
@@ -4415,9 +4458,15 @@ class GetAssessmentsOfHr(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, hr_id):
-        assessments = Assessment.objects.filter(
-            Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id), Q(status="ongoing") | Q(status="completed")
-        ).order_by("-created_at").distinct()
+        assessments = (
+            Assessment.objects.filter(
+                Q(hr__id=hr_id)
+                | Q(assessment_modal__lesson__course__batch__hr__id=hr_id),
+                Q(status="ongoing") | Q(status="completed"),
+            )
+            .order_by("-created_at")
+            .distinct()
+        )
         assessment_list = []
         for assessment in assessments:
             total_responses_count = ParticipantResponse.objects.filter(
@@ -4964,7 +5013,9 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
             for schedular_project in schedular_projects:
                 batches = SchedularBatch.objects.filter(project=schedular_project)
                 if hr_id:
-                    batches  = batches.filter(Q(project__hr__id=hr_id)| Q(hr__id=hr_id)).distinct()
+                    batches = batches.filter(
+                        Q(project__hr__id=hr_id) | Q(hr__id=hr_id)
+                    ).distinct()
 
                 for batch in batches:
                     assessments = Assessment.objects.filter(
