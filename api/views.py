@@ -9307,65 +9307,68 @@ class StandardizedFieldRequestAcceptReject(APIView):
 
     def put(self, request):
         status = request.data.get("status")
-        request_id = request.data.get("request_id")
+        request_ids = request.data.get("request_id")
+
+        if not isinstance(request_ids, list):
+            request_ids = [request_ids]
 
         try:
             with transaction.atomic():
-                request_instance = StandardizedFieldRequest.objects.get(id=request_id)
-                field_name = request_instance.standardized_field_name.field
-                value = request_instance.value
+                for request_id in request_ids:
+                    request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+                    field_name = request_instance.standardized_field_name.field
+                    value = request_instance.value
 
-                standardized_field, created = StandardizedField.objects.get_or_create(
-                    field=field_name
-                )
-                if status == "accepted":
-                    request_instance.status = status
-                    request_instance.save()
+                    standardized_field, created = StandardizedField.objects.get_or_create(
+                        field=field_name
+                    )
+                    if status == "accepted":
+                        request_instance.status = status
+                        request_instance.save()
 
-                    # if value not in standardized_field.values:
-                    #     standardized_field.values.append(value)
-                    #     standardized_field.save()
-                    # else:
-                    #     return Response({"error": "Value already present."}, status=404)
-                    return Response({"message": f"Request {status}"}, status=200)
-                else:
-                    request_instance.status = status
-                    request_instance.save()
+                        # if value not in standardized_field.values:
+                        #     standardized_field.values.append(value)
+                        #     standardized_field.save()
+                        # else:
+                        #     return Response({"error": "Value already present."}, status=404)
+                    else:
+                        request_instance.status = status
+                        request_instance.save()
 
-                    if value in standardized_field.values:
-                        standardized_field.values.remove(value)
-                        standardized_field.save()
+                        if value in standardized_field.values:
+                            standardized_field.values.remove(value)
+                            standardized_field.save()
 
-                    for model_name, fields in models_to_update.items():
-                        model_class = globals()[model_name]
-                        instances = model_class.objects.all()
+                        for model_name, fields in models_to_update.items():
+                            model_class = globals()[model_name]
+                            instances = model_class.objects.all()
 
-                        for instance in instances:
-                            for field in fields:
-                                field_value = getattr(instance, field, None)
-                                if field_value is not None:
-                                    if (
-                                        isinstance(field_value, list)
-                                        and value in field_value
-                                    ):
-                                        field_value.remove(value)
-                                        instance.save()
-                    if request_instance.coach:
-                        send_mail_templates(
-                            "coach_templates/reject_feild_item_request.html",
-                            [request_instance.coach.email],
-                            "Meeraq | Field Rejected",
-                            {
-                                "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
-                                "value": value,
-                                "feild": field_name.replace(" ", "_").title(),
-                            },
-                            [],
-                        )
-                    return Response({"message": f"Request {status}"}, status=200)
+                            for instance in instances:
+                                for field in fields:
+                                    field_value = getattr(instance, field, None)
+                                    if field_value is not None:
+                                        if (
+                                            isinstance(field_value, list)
+                                            and value in field_value
+                                        ):
+                                            field_value.remove(value)
+                                            instance.save()
+                        if request_instance.coach:
+                            send_mail_templates(
+                                "coach_templates/reject_feild_item_request.html",
+                                [request_instance.coach.email],
+                                "Meeraq | Field Rejected",
+                                {
+                                    "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                                    "value": value,
+                                    "feild": field_name.replace(" ", "_").title(),
+                                },
+                                [],
+                            )
+                return Response({"message": f"Requests {status}"}, status=200)
         except Exception as e:
             print(str(e))
-            return Response({"error": f"Failed to perform operation."}, status=500)
+            return Response({"error": "Failed to perform operation."}, status=500)
 
 
 class StandardFieldDeleteValue(APIView):
