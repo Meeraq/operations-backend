@@ -43,6 +43,7 @@ from .models import (
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
@@ -4360,8 +4361,95 @@ def get_end_meeting_feedback_response_data(request):
             {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+        
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def export_feedback_data_to_excel(request):
+    try:
+        coach_session_feedback_responses = (
+            CoachingSessionsFeedbackResponse.objects.all()
+        )
+        data = []
+        
+        for coach_session_feedback_response in coach_session_feedback_responses:
+            temp = {}
+            cass_session = coach_session_feedback_response.caas_session
+            
+            if cass_session:
+                if cass_session.coach:
+                    coach_name = (
+                        cass_session.coach.first_name
+                        + " "
+                        + cass_session.coach.last_name
+                    )
+                else:
+                    coach_name = None
 
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": coach_name,
+                    "project_name": cass_session.project.name,
+                    "org_name": cass_session.project.organisation.name,
+                    "coachee_name": cass_session.learner.name,
+                    "session_type": cass_session.session_type,
+                    "session_number": cass_session.session_number,
+                    "type": "CAAS",
+                }
+            else:
+                seeq_session = coach_session_feedback_response.schedular_session
+
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": seeq_session.availibility.coach.first_name
+                    + " "
+                    + seeq_session.availibility.coach.last_name,
+                    "project_name": seeq_session.coaching_session.batch.project.name,
+                    "org_name": seeq_session.coaching_session.batch.project.organisation.name,
+                    "coachee_name": seeq_session.learner.name,
+                    "session_type": seeq_session.coaching_session.session_type,
+                    "session_number": seeq_session.coaching_session.coaching_session_number,
+                    "type": "SEEQ",
+                }
+
+            # Add session rating
+            session_rating = None
+            for answer in coach_session_feedback_response.answers.all():
+                if answer.question.type == "rating_1_to_5":
+                    session_rating = answer.rating
+                    break
+            temp["session_rating"] = session_rating
+            
+            # Collect all answers
+            for answer in coach_session_feedback_response.answers.all():
+                question_text = answer.question.text
+                answer_text = answer.text_answer
+                temp[question_text] = answer_text
+            
+            data.append(temp)
+
+        # Convert data to pandas DataFrame
+        df = pd.DataFrame(data)
+
+        # Create an in-memory Excel file
+        excel_buffer = BytesIO()
+        df.to_excel(excel_buffer, index=False)
+        excel_buffer.seek(0)
+
+        # Prepare response to return the Excel file as a download
+        response = FileResponse(excel_buffer, filename='feedback_data.xlsx')
+        response['Content-Disposition'] = 'attachment; filename="feedback_data.xlsx"'
+        
+        return response
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data", "detail": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        
+        
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_coach_session_feedback_response_data(request, feedback_response_id):
