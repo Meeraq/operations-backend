@@ -2700,8 +2700,8 @@ def get_user_data(user):
 def generate_otp(request):
     try:
         user = User.objects.get(username=request.data["email"])
-        learner_roles = user.profile.roles.all().filter(name="learner")
-        hr_roles = user.profile.roles.all().filter(name="hr")
+        learner_roles = user.profile.roles.filter(name="learner")
+        hr_roles = user.profile.roles.filter(name="hr")
         # for hr and coachee not allowing login when they are added in caas project where hr and coachee's platform is not provided/needed
         if learner_roles.exists():
             engagements = Engagement.objects.filter(
