@@ -659,6 +659,10 @@ class AssessmentView(APIView):
             assessment.assessment_start_date = request.data.get("assessment_start_date")
             assessment.whatsapp_reminder = request.data.get("whatsapp_reminder")
             assessment.email_reminder = request.data.get("email_reminder")
+            assessment.shuffle_questions = request.data.get("shuffle_questions")
+            assessment.is_quiz = request.data.get("is_quiz")
+            assessment.passing_percentage = request.data.get("passing_percentage")
+            assessment.brand = request.data.get("brand")
             assessment.reminders = request.data.get("reminders")
             assessment.assessment_timing = request.data.get("assessment_timing")
             if request.data.get("assessment_timing") == "post":
@@ -734,7 +738,7 @@ class AssessmentStatusChange(APIView):
                     and assessment.status == "ongoing"
                     and not assessment.initial_reminder
                 ):
-                    send_assessment_invitation_mail.delay(assessment.id)
+                    # send_assessment_invitation_mail.delay(assessment.id)
                     assessment.initial_reminder = True
                     assessment.save()
                     # for hr in assessment.hr.all():
@@ -1030,7 +1034,18 @@ class QuestionsForAssessment(APIView):
                 else:
                     competency_questions[competency_name] = [full_question]
 
-            return Response(competency_questions, status=status.HTTP_200_OK)
+            # Shuffle the questions within each competency
+            for competency in competency_questions:
+                random.shuffle(competency_questions[competency])
+
+            # Shuffle the keys of the competency_questions dictionary
+            shuffled_competency_questions = {}
+            keys = list(competency_questions.keys())
+            random.shuffle(keys)
+            for key in keys:
+                shuffled_competency_questions[key] = competency_questions[key]
+
+            return Response(shuffled_competency_questions, status=status.HTTP_200_OK)
 
         except Assessment.DoesNotExist:
             return Response(
@@ -4671,7 +4686,7 @@ class AllAssessmentInAssessmentLesson(APIView):
 def send_mail_to_not_responded_participant(request, assessment_id):
     try:
         data = {"req": request.data, "assessment_id": assessment_id}
-        send_assessment_invitation_mail_on_click.delay(data)
+        # send_assessment_invitation_mail_on_click.delay(data)
         return Response({"message": "Email Sent Sucessfully"}, status=200)
     except Exception as e:
         print(str(e))
