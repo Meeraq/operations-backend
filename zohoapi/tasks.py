@@ -624,8 +624,16 @@ def fetch_activity_logs(organization_id):
     has_more_page = True
     page = 1
 
+
+    to_date = datetime.now().date()
+    from_date = to_date - timedelta(days=2)
+
+    # Format dates as strings in the desired format (YYYY-MM-DD)
+    to_date_str = to_date.strftime('%Y-%m-%d')
+    from_date_str = from_date.strftime('%Y-%m-%d')
+
     while has_more_page:
-        api_url = f"{base_url}/reports/activitylogs/?organization_id={organization_id}&filter_by=CreatedDate.ThisWeek&page={page}"
+        api_url = f"{base_url}/reports/activitylogs/?organization_id={organization_id}&filter_by=CreatedDate.CustomDate&from_date={from_date_str}&to_date={to_date_str}&page={page}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.get(api_url, headers=auth_header)
 
@@ -1545,8 +1553,7 @@ def create_or_update_bills(bill_id):
 @shared_task
 def update_zoho_data():
     all_activit_logs = fetch_activity_logs(organization_id)
-    filtered_activity_logs = filter_objects_by_date(all_activit_logs, 2)
-    reversed_logs = list(reversed(filtered_activity_logs))
+    reversed_logs = list(reversed(all_activit_logs))
     for activity in reversed_logs:
         if "activity_details" in activity:
             transaction_type = activity["activity_details"]["transaction_type"]
