@@ -1369,16 +1369,12 @@ def send_calendar_invites(request):
                                 [
                                     {
                                         "emailAddress": {
-                                            "address": (
-                                                batch_users.user.email
-                                                if env("ENVIRONMENT") == "PRODUCTION:"
-                                                else "naveen@meeraaq.com"
-                                            ),
+                                            "address": batch_users.user.email,
                                         },
                                         "type": "required",
                                     }
                                 ],
-                                env("COACHING_CALENDAR_INVITATION_ORGANIZER"),
+                                env("CTT_CALENDAR_INVITATION_ORGANIZER"),
                                 session.id,
                                 batch_users.user.id,
                                 meeting_link if meeting_link else None,
