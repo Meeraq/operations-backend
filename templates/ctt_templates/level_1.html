@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .header {
+        text-align: center;
+        padding: 20px 0;
+      }
+      .section {
+        margin-bottom: 20px;
+      }
+      .section h2 {
+        background-color: #f4f4f4;
+        padding: 10px;
+        border-left: 5px solid #007bff;
+      }
+      .section p,
+      .section ul {
+        padding: 10px;
+      }
+      .section ul {
+        list-style-type: square;
+      }
+      .footer {
+        background-color: #f4f4f4;
+        padding: 10px;
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <table
+      border="0"
+      cellpadding="0"
+      cellspacing="0"
+      style="font-family: Arial, Helvetica, sans-serif"
+      width="100%"
+    >
+      <tbody>
+        <tr>
+          <td align="center">
+            <table
+              cellpadding="0"
+              cellspacing="0"
+              class="main-table"
+              style="
+                margin: 0px auto 0px calc(0%);
+                background: white;
+                border-radius: 3px;
+                box-shadow: rgb(234, 234, 234) 0px 0px 0px;
+                width: 100%;
+              "
+            >
+              <tbody>
+                <tr style="border: 0">
+                  <td style="padding: 20px; background: #f8f7f8; border: 0">
+                    <div align="center">
+                      <table
+                        border="0"
+                        cellpadding="0"
+                        cellspacing="0"
+                        style="
+                          width: 100%;
+                          mso-cellspacing: 0cm;
+                          background: #f8f7f8;
+                          mso-yfti-tbllook: 1184;
+                          mso-padding-alt: 0cm 0cm 0cm 0cm;
+                        "
+                        width="100%"
+                      >
+                        <tbody>
+                          <tr
+                            style="
+                              mso-yfti-irow: 0;
+                              mso-yfti-firstrow: yes;
+                              mso-yfti-lastrow: yes;
+                            "
+                          >
+                            <td style="padding: 15pt 15pt 15pt 15pt" <p>
+                              <div class="container">
+                                <div class="header">
+                                  <img
+                                    src="data:image/png;base64, {{ image_base64 }}"
+                                    alt="Congratulations on Starting Your Learning Journey!"
+                                  />
+                                </div>
+
+                                <div class="section">
+                                  <p>
+                                    <strong
+                                      ><span style="font-size: 14px"
+                                        >Dear&nbsp;</span
+                                      ></strong
+                                    ><b>{{name}}</b><strong>,</strong>
+                                  </p>
+                                  <p>
+                                    Congratulations on kickstarting your
+                                    learning journey with
+                                    Coach-To-Transformation. It’s a journey of
+                                    self-awareness & discovery, forming new
+                                    bonds & moving into a space where you can
+                                    help others with a structured framework. We
+                                    hope you find what you are looking for
+                                    during this journey.
+                                  </p>
+                                  <p>
+                                    Each of you in the cohort is expected to
+                                    attend the program in its totality. Each
+                                    element includes sessions, peer coaching,
+                                    and self-study. It is curated with the
+                                    intent to enhance your learning experience
+                                    and its impact.
+                                  </p>
+                                </div>
+
+                                <div class="section">
+                                  <h2>Course Details</h2>
+                                  <p>
+                                    <strong>Course Start Date:</strong>
+                                    {{course_start_date}}
+                                  </p>
+                                  <p>
+                                    <strong>Session Timings:</strong>
+                                    {{session_timing}}
+                                  </p>
+                                  <p>
+                                    <strong>Faculty:</strong>
+                                    {{faculty_names_str}}
+                                  </p>
+                                </div>
+
+                                <div class="section">
+                                  <h2>Course Journey</h2>
+                                  <p>
+                                    The program will be spread across 4 months
+                                    (14 weeks) and 3 hours per week.
+                                  </p>
+                                  <h3>Timeline</h3>
+                                  <ul>
+                                    <li>
+                                      <strong>1st Month:</strong>
+                                      <ul>
+                                        <li>
+                                          Be added to the
+                                          Coach-To-Transformation Community.
+                                        </li>
+                                        <li>
+                                          Start the journey of 60 hours of coach
+                                          training.
+                                        </li>
+                                        <li>Begin Peer-to-Peer Coaching.</li>
+                                        <li>
+                                          Start exploring the resources on LMS.
+                                        </li>
+                                      </ul>
+                                    </li>
+                                    <li>
+                                      <strong>2nd Month:</strong>
+                                      <ul>
+                                        <li>
+                                          Have your first one-on-one Mentor
+                                          Coaching session with your mentor
+                                          coach.
+                                        </li>
+                                        <li>
+                                          Be added to the larger Peer Coaching
+                                          Community with all the alumni of CTT.
+                                        </li>
+                                        <li>Continue Peer-to-Peer Coaching.</li>
+                                      </ul>
+                                    </li>
+                                    <li>
+                                      <strong>3rd Month:</strong>
+                                      <ul>
+                                        <li>
+                                          Have observed Mentoring during your
+                                          sessions.
+                                        </li>
+                                        <li>Continue Peer-to-Peer Coaching.</li>
+                                        <li>
+                                          Continue one-on-one Mentor Coaching.
+                                        </li>
+                                      </ul>
+                                    </li>
+                                    <li>
+                                      <strong>4th Month:</strong>
+                                      <ul>
+                                        <li>
+                                          Complete peer-to-peer Coaching with
+                                          your cohort and start working towards
+                                          100 hours with the Peer Coaching
+                                          community.
+                                        </li>
+                                        <li>
+                                          Completion of Mentor Coaching
+                                          sessions.
+                                        </li>
+                                        <li>
+                                          Start preparing for the Performance
+                                          Evaluation.
+                                        </li>
+                                      </ul>
+                                    </li>
+                                  </ul>
+                                </div>
+
+                                <div class="section">
+                                  <h2>Session Schedule</h2>
+                                  <p>
+                                    We would love to block your calendar for
+                                    {{total_sessions_to_book}} sessions. Details
+                                    are as follows:
+                                  </p>
+                                  <p>
+                                    <strong>Topic:</strong> {{program_name}}
+                                    ({{batch_name}})
+                                  </p>
+                                  <p>
+                                    <strong>Weekly schedule:</strong> Every week
+                                    on {{day_of_week}}, until
+                                    {{course_end_date}}.
+                                  </p>
+                                  <table
+                                    border="1"
+                                    cellpadding="10"
+                                    cellspacing="0"
+                                  >
+                                    <tr>
+                                      <th>Session</th>
+                                      <th>Date</th>
+                                      <th>Timings</th>
+                                    </tr>
+                                    {% for session in all_sessions_array %}
+                                    <tr>
+                                      <td>{{session.name}}</td>
+                                      <td>{{session.date}}</td>
+                                      <td>{{session.timing}}</td>
+                                    </tr>
+                                    {% endfor %}
+                                  </table>
+                                </div>
+
+                                <div class="section">
+                                  <h2>Meeting Link</h2>
+                                  <p>
+                                    Join Meeting:
+                                    <a href="{{ meeting_link }}"
+                                      >{{ meeting_link }}</a
+                                    >
+                                  </p>
+                                  {% if meeting_id %}
+                                  <p>
+                                    <strong>Meeting ID:</strong> {{meeting_id}}
+                                  </p>
+                                  {% endif %} 
+                                  {% if meeting_passcode %}
+                                  <p>
+                                    <strong>Passcode:</strong>
+                                    {{meeting_passcode}}
+                                  </p>
+                                  {% endif %}
+                                </div>
+
+                                <div class="section">
+                                  <h2>Requirements</h2>
+                                  <p>
+                                    All sessions are conducted virtually. Once
+                                    online, you are expected to always be on
+                                    video and mute. Whenever you need to speak,
+                                    you may unmute and share your views or
+                                    questions.
+                                  </p>
+                                  <p>
+                                    Please feel free to contact us for any
+                                    queries or support at +91 9731456343 or
+                                    write to us at
+                                    <a
+                                      href="mailto:letsconnect@coachtotransformation.com"
+                                      >letsconnect@coachtotransformation.com</a
+                                    >.
+                                  </p>
+                                </div>
+
+                                <div class="footer">
+                                  <p>Happy to see you soon!</p>
+                                  <div
+                                    style="
+                                      font-size: small;
+                                      font-style: italic;
+                                      text-align: left;
+                                    "
+                                  >
+                                    <p><strong>Disclaimer:</strong></p>
+                                    <p>
+                                      Your seat is non-transferable, as these
+                                      are deep-learning programs.
+                                    </p>
+                                    <p>
+                                      ICF as an organization makes policy
+                                      changes based on the start date of a
+                                      Learner. Shifting of a batch can result in
+                                      a new start date which can have an impact
+                                      on ICF policies in the future.
+                                    </p>
+                                    <p>
+                                      Moving to a different batch can disturb
+                                      the learning of the current cohort and it
+                                      can also create precedence in the cohort.
+                                    </p>
+                                    <p>
+                                      If a participant has attended more than 1
+                                      session and requests for a change of
+                                      batch/program they would have to retake
+                                      the program once again and would be
+                                      considered as 'new admission' in the new
+                                      batch. The participant also agrees to pay
+                                      the prevalent amount or batch shifting
+                                      charges of INR 20,000 + GST or USD 250 for
+                                      the program including mentor coaching
+                                      fees.
+                                    </p>
+                                    <p>
+                                      Hence, we recommend you find ways to
+                                      partner with us and continue in the same
+                                      cohort at all times. Lastly, we request
+                                      any considerations on this will be decided
+                                      at the sole discretion of
+                                      Coach-To-Transformation.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>
