@@ -190,7 +190,11 @@ def batch_details(request):
     data = []
     index = 1
     for batch in batches:
-        total_participants = BatchUsers.objects.using("ctt").filter(batch=batch).count()
+        total_participants = (
+            BatchUsers.objects.using("ctt")
+            .filter(batch=batch, deleted_at__isnull=True)
+            .count()
+        )
         no_of_sessions = Sessions.objects.using("ctt").filter(batch=batch).count()
         faculty_ids = (
             BatchFaculty.objects.using("ctt")
@@ -231,7 +235,11 @@ def batch_details(request):
 @permission_classes([IsAuthenticated])
 def participant_details(request):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
+        batch_users = (
+            BatchUsers.objects.using("ctt")
+            .filter(deleted_at__isnull=True)
+            .order_by("-created_at")
+        )
         data = []
         index = 1
 
@@ -545,7 +553,7 @@ def get_faculties(request):
 
     participant_counts = (
         BatchUsers.objects.using("ctt")
-        .filter(batch_id__in=batch_ids)
+        .filter(batch_id__in=batch_ids, deleted_at__isnull=True)
         .values("batch_id")
         .annotate(count=Count("id"))
     )
@@ -674,7 +682,7 @@ def get_all_finance(request):
         batch_users = (
             BatchUsers.objects.using("ctt")
             .select_related("user", "batch__program")
-            .all()
+            .filter(deleted_at__isnull=True)
             .order_by("-created_at")
         )
 
@@ -814,7 +822,7 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
 def get_participants_of_that_batch(request, batch_id):
     try:
         batch_users = BatchUsers.objects.using("ctt").filter(
-            batch__id=batch_id, deleted_at__isnull=False
+            batch__id=batch_id, deleted_at__isnull=True
         )
         data = []
         index = 1
@@ -879,7 +887,11 @@ def get_participants_of_that_batch(request, batch_id):
 @permission_classes([IsAuthenticated])
 def get_ctt_salesperson_individual(request, salesperson_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
+        batch_users = (
+            BatchUsers.objects.using("ctt")
+            .filter(deleted_at__isnull=True)
+            .order_by("-created_at")
+        )
         data = []
         index = 1
         for batch_user in batch_users:
@@ -953,7 +965,12 @@ def get_ctt_salesperson_individual(request, salesperson_id):
 def get_card_data_for_dashboard_ctt(request):
     try:
         batches = Batches.objects.using("ctt").all().count()
-        unique_users_count = BatchUsers.objects.using("ctt").count()
+        unique_users_count = (
+            BatchUsers.objects.using("ctt")
+            .filter(deleted_at__isnull=True)
+            .distinct()
+            .count()
+        )
         faculties = Faculties.objects.using("ctt").all().count()
 
         return Response(
@@ -1317,7 +1334,9 @@ def send_calendar_invites(request):
                 image_base64, selected_template = (
                     get_the_meeting_details_based_on_level(certification_name)
                 )
-                batch_userss = BatchUsers.objects.using("ctt").filter(batch=batch)
+                batch_userss = BatchUsers.objects.using("ctt").filter(
+                    batch=batch, deleted_at__isnull=True
+                )
                 for batch_users in batch_userss:
                     description = render_to_string(
                         selected_template,

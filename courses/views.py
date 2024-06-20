@@ -1482,7 +1482,9 @@ def get_course_enrollment(request, course_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "curriculum", "coach")])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "curriculum", "coach")]
+)
 def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
@@ -3212,7 +3214,11 @@ class CttFeedbackEmailValidation(APIView):
 
             batch_user = (
                 BatchUsers.objects.using("ctt")
-                .filter(user__email=email, batch__id=ctt_feedback.ctt_batch)
+                .filter(
+                    user__email=email,
+                    batch__id=ctt_feedback.ctt_batch,
+                    deleted_at__isnull=True,
+                )
                 .first()
             )
 
@@ -4361,9 +4367,9 @@ def get_end_meeting_feedback_response_data(request):
             {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-        
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([AllowAny])
 def export_feedback_data_to_excel(request):
     try:
@@ -4371,11 +4377,11 @@ def export_feedback_data_to_excel(request):
             CoachingSessionsFeedbackResponse.objects.all()
         )
         data = []
-        
+
         for coach_session_feedback_response in coach_session_feedback_responses:
             temp = {}
             cass_session = coach_session_feedback_response.caas_session
-            
+
             if cass_session:
                 if cass_session.coach:
                     coach_name = (
@@ -4419,13 +4425,20 @@ def export_feedback_data_to_excel(request):
                     session_rating = answer.rating
                     break
             temp["session_rating"] = session_rating
-            
+
             # Collect all answers
             for answer in coach_session_feedback_response.answers.all():
                 question_text = answer.question.text
-                if answer.question.type in ["single_correct_answer", "multiple_correct_answer"]:
+                if answer.question.type in [
+                    "single_correct_answer",
+                    "multiple_correct_answer",
+                ]:
                     answer_value = answer.selected_options
-                elif answer.question.type in ["rating_1_to_5", "rating_1_to_10", "rating_0_to_10"]:
+                elif answer.question.type in [
+                    "rating_1_to_5",
+                    "rating_1_to_10",
+                    "rating_0_to_10",
+                ]:
                     answer_value = answer.rating
                 elif answer.question.type == "descriptive_answer":
                     answer_value = answer.text_answer
@@ -4443,9 +4456,9 @@ def export_feedback_data_to_excel(request):
         excel_buffer.seek(0)
 
         # Prepare response to return the Excel file as a download
-        response = FileResponse(excel_buffer, filename='feedback_data.xlsx')
-        response['Content-Disposition'] = 'attachment; filename="feedback_data.xlsx"'
-        
+        response = FileResponse(excel_buffer, filename="feedback_data.xlsx")
+        response["Content-Disposition"] = 'attachment; filename="feedback_data.xlsx"'
+
         return response
 
     except Exception as e:
@@ -4454,8 +4467,8 @@ def export_feedback_data_to_excel(request):
             {"error": "Failed to get data", "detail": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-        
-        
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_coach_session_feedback_response_data(request, feedback_response_id):
@@ -4722,7 +4735,9 @@ def get_ctt_feedback(request):
         for ctt_feedback in ctt_feedbacks:
             ctt_batch = Batches.objects.using("ctt").get(id=ctt_feedback.ctt_batch)
             total_users = (
-                BatchUsers.objects.using("ctt").filter(batch=ctt_batch).count()
+                BatchUsers.objects.using("ctt")
+                .filter(batch=ctt_batch, deleted_at__isnull=True)
+                .count()
             )
             feedback_responses = CttFeedbackResponse.objects.filter(
                 ctt_feedback=ctt_feedback
@@ -4738,7 +4753,7 @@ def get_ctt_feedback(request):
                 "total_responded": feedback_responses,
                 "total_participant": total_users,
                 "unique_id": ctt_feedback.unique_id,
-                "program":ctt_feedback.program
+                "program": ctt_feedback.program,
             }
             all_feedback.append(data)
         return Response(all_feedback)
@@ -4858,13 +4873,14 @@ def create_feedback_template(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to create feedback"}, status=500)
-    
+
+
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])    
+@permission_classes([IsAuthenticated])
 def edit_template(request, template_id):
     try:
         feedback = Feedback.objects.get(id=template_id)
-        
+
         name = request.data.get("name", feedback.name)
         questions = request.data.get("questions", [])
 
@@ -4873,9 +4889,15 @@ def edit_template(request, template_id):
             question_id = question_data.get("id")
             if question_id:
                 question_instance = Question.objects.get(id=question_id)
-                question_instance.text = question_data.get("text", question_instance.text)
-                question_instance.options = question_data.get("options", question_instance.options)
-                question_instance.type = question_data.get("type", question_instance.type)
+                question_instance.text = question_data.get(
+                    "text", question_instance.text
+                )
+                question_instance.options = question_data.get(
+                    "options", question_instance.options
+                )
+                question_instance.type = question_data.get(
+                    "type", question_instance.type
+                )
                 question_instance.save()
             else:
                 question_instance = Question.objects.create(
@@ -4897,11 +4919,12 @@ def edit_template(request, template_id):
         print(str(e))
         return Response({"error": "Failed to update feedback"}, status=500)
 
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_template(request):
     try:
-        template_id = request.data.get('template_id')
+        template_id = request.data.get("template_id")
         if not template_id:
             return Response(
                 {"error": "Template ID not provided."},
@@ -4925,16 +4948,17 @@ def delete_template(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+
 # @api_view(["GET"])
 # @permission_classes([IsAuthenticated])
 # def get_all_feedback(request):
 #     try:
 #         # Retrieve all feedback instances
 #         feedback_instances = Feedback.objects.all()
-        
+
 #         # Serialize all feedback instances
 #         feedback_serializer = FeedbackSerializer(feedback_instances, many=True)
-        
+
 #         return Response(feedback_serializer.data, status=200)
 #     except Exception as e:
 #         print(str(e))
