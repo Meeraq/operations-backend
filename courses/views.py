@@ -4423,9 +4423,15 @@ def export_feedback_data_to_excel(request):
             # Collect all answers
             for answer in coach_session_feedback_response.answers.all():
                 question_text = answer.question.text
-                answer_text = answer.text_answer
-                temp[question_text] = answer_text
-            
+                if answer.question.type in ["single_correct_answer", "multiple_correct_answer"]:
+                    answer_value = answer.selected_options
+                elif answer.question.type in ["rating_1_to_5", "rating_1_to_10", "rating_0_to_10"]:
+                    answer_value = answer.rating
+                elif answer.question.type == "descriptive_answer":
+                    answer_value = answer.text_answer
+                else:
+                    answer_value = None  # Handle any unexpected question types
+                temp[question_text] = answer_value
             data.append(temp)
 
         # Convert data to pandas DataFrame
