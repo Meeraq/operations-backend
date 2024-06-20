@@ -2058,7 +2058,7 @@ class GetObserverResponseForAllAssessments(APIView):
 
 
 class AddMultipleQuestions(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","curriculum")]
 
     @transaction.atomic
     def post(self, request):
