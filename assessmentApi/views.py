@@ -738,7 +738,7 @@ class AssessmentStatusChange(APIView):
                     and assessment.status == "ongoing"
                     and not assessment.initial_reminder
                 ):
-                    # send_assessment_invitation_mail.delay(assessment.id)
+                    send_assessment_invitation_mail.delay(assessment.id)
                     assessment.initial_reminder = True
                     assessment.save()
                     # for hr in assessment.hr.all():
@@ -4735,7 +4735,7 @@ class AllAssessmentInAssessmentLesson(APIView):
 def send_mail_to_not_responded_participant(request, assessment_id):
     try:
         data = {"req": request.data, "assessment_id": assessment_id}
-        # send_assessment_invitation_mail_on_click.delay(data)
+        send_assessment_invitation_mail_on_click.delay(data)
         return Response({"message": "Email Sent Sucessfully"}, status=200)
     except Exception as e:
         print(str(e))
