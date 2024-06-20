@@ -4757,7 +4757,7 @@ def get_ctt_feedback(request):
                 "total_responded": feedback_responses,
                 "total_participant": total_users,
                 "unique_id": ctt_feedback.unique_id,
-                "program_name": ctt_batch.program.name,
+                "program_name":  ctt_batch.program.name,
             }
             all_feedback.append(data)
         return Response(all_feedback)

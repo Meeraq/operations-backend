@@ -60,10 +60,7 @@ class Question(models.Model):
 
 
 class Questionnaire(models.Model):
-    QUESTIONNAIRE_TYPES = [
-        ("self", "Self"),
-        ("360", "360"),
-    ]
+    QUESTIONNAIRE_TYPES = [("self", "Self"), ("360", "360"), ("quiz", "Quiz")]
     QUESTIONS_TYPE = [
         ("correct_answer_type", " Correct Answer Type"),
         ("rating_type", "Rating Type"),
@@ -126,6 +123,7 @@ class Assessment(models.Model):
         ("90", "90"),
         ("180", "180"),
     ]
+
     RATING_CHOICES = [
         ("1-5", "1-5"),
         ("1-10", "1-10"),
@@ -141,6 +139,11 @@ class Assessment(models.Model):
         ("pre", "Pre-Assessment"),
         ("post", "Post-Assessment"),
         ("none", "None"),
+    ]
+
+    BRAND_CHOICES = [
+        ("Meeraq", "Meeraq"),
+        ("CTT", "CTT"),
     ]
 
     name = models.CharField(max_length=255, blank=True)
@@ -164,6 +167,8 @@ class Assessment(models.Model):
     # rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     email_reminder = models.BooleanField(blank=True, default=False)
     whatsapp_reminder = models.BooleanField(blank=True, default=False)
+    shuffle_questions = models.BooleanField(blank=True, default=False)
+    brand = models.CharField(max_length=255, choices=BRAND_CHOICES, default="Meeraq")
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     result_released = models.BooleanField(blank=True, default=False)
     assessment_timing = models.CharField(
@@ -179,6 +184,10 @@ class Assessment(models.Model):
         SchedularBatch, on_delete=models.CASCADE, blank=True, null=True
     )
     automated_result = models.BooleanField(blank=True, default=False)
+    is_quiz = models.BooleanField(
+        default=False,
+    )  # New field to identify if the assessment is a quiz
+    passing_percentage = models.IntegerField(blank=True, default=0, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
