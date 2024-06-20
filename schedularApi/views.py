@@ -239,6 +239,7 @@ from zohoapi.models import (
 from zohoapi.views import (
     fetch_purchase_orders,
     organization_id,
+    get_sales_order_queryset_for_project,
     fetch_sales_persons,
     filter_purchase_order_data,
 )
@@ -9410,4 +9411,13 @@ def get_hrs_of_batch(request, batch_id):
 def get_hrs_of_organisation(request, organisation_id):
     hrs = HR.objects.filter(organisation__id=organisation_id)
     serializer = HrNoDepthSerializer(hrs, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_gm_sheet_of_project(request, project_type, project_id):
+    sales_orders =  get_sales_order_queryset_for_project(project_id, project_type)
+    gm_sheets = [sales_order.gm_sheet for sales_order in sales_orders if sales_order.gm_sheet]
+    serializer = GmSheetDetailedSerializer(gm_sheets, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)

@@ -1163,9 +1163,9 @@ FIELD_NAME_VALUES = {
     "product_type": "Product Type",
     "category": "Category",
     "asset_location": "Location",
-    "coaching_type":"Coaching Type",
-    "credentials_feels_like":"Credential Feels Like",
-    "competency":"Competency"
+    "coaching_type": "Coaching Type",
+    "credentials_feels_like": "Credential Feels Like",
+    "competency": "Competency",
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -2280,9 +2280,9 @@ def add_coach(request):
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     ctt_nctt = json.loads(request.data["ctt_nctt"])
-    competency = json.loads(request.data['competency'])
-    credentials_feels_like = request.data['credentials_feels_like']
-    coaching_type =request.data['coaching_type']
+    competency = json.loads(request.data["competency"])
+    credentials_feels_like = request.data["credentials_feels_like"]
+    coaching_type = request.data["coaching_type"]
     intro_summary = request.data.get("intro_summary", "")
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
@@ -2399,7 +2399,7 @@ def add_coach(request):
                 intro_summary=intro_summary,
                 competency=competency,
                 credentials_feels_like=credentials_feels_like,
-                coaching_type=coaching_type
+                coaching_type=coaching_type,
             )
 
             # Approve coach
@@ -3128,7 +3128,10 @@ def send_consent(request):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach", "sales", "finance")]
+    [
+        IsAuthenticated,
+        IsInRoles("learner", "pmo", "hr", "coach", "sales", "finance", "leader"),
+    ]
 )
 def get_project_details(request, project_type, project_id):
     try:
@@ -5324,7 +5327,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
         learner = LearnerSerializer(session_request.learner).data
         learner_name = session_request.learner.name
         learner_email = session_request.learner.email
-        learner_phone = session_request.learner.phone,
+        learner_phone = (session_request.learner.phone,)
         session_type = session_request.session_type
         session_number = session_request.session_number
         billable_session_number = session_request.billable_session_number
@@ -5349,7 +5352,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "organisation": organisation,
                 "coach_name": coach_name,
                 "coach_email": coach_email,
-                "coach_phone": coach_phone, 
+                "coach_phone": coach_phone,
                 "learner": learner,
                 "learner_name": learner_name,
                 "learner_email": learner_email,
@@ -5413,7 +5416,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "learner": learner,
                 "learner_name": learner_name,
                 "learner_email": learner_email,
-                "learner_phone":learner_phone,
+                "learner_phone": learner_phone,
                 "session_type": session_type,
                 "session_number": session_number,
                 "billable_session_number": billable_session_number,
@@ -9061,7 +9064,7 @@ def get_coach_profile_template(request, project_id):
 class StandardizedFieldAPI(APIView):
     permission_classes = [
         IsAuthenticated,
-        IsInRoles("coach", "facilitator", "pmo", "hr", "learner"),
+        IsInRoles("coach", "facilitator", "pmo", "hr", "learner", 'leader'),
     ]
 
     def get(self, request):
@@ -13080,13 +13083,16 @@ def edit_curriculum(request, curriculum_id):
 import time
 import logging
 
+
 def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
     while True:
         try:
             run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
             if run.completed_at:
                 elapsed_time = run.completed_at - run.created_at
-                formatted_elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
+                formatted_elapsed_time = time.strftime(
+                    "%H:%M:%S", time.gmtime(elapsed_time)
+                )
                 logging.info(f"Run completed in {formatted_elapsed_time}")
 
                 # Get messages here once Run is completed!
@@ -13098,9 +13104,10 @@ def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
         except Exception as e:
             logging.error(f"An error occurred while retrieving the run: {e}")
             return None
-        
+
         logging.info("Waiting for run to complete...")
         time.sleep(sleep_interval)
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -13136,14 +13143,14 @@ def meeraq_chatbot(request):
     response["response"] = wait_for_run_completion(client, thread_id, run.id)
 
     if not response["response"]:
-        return Response({"error": "Failed to get response from the assistant."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"error": "Failed to get response from the assistant."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     # Save to ChatHistory
     chat_history = ChatHistory.objects.create(
-        prompt=prompt, 
-        response=response["response"],
-        user=user,
-        email=email
+        prompt=prompt, response=response["response"], user=user, email=email
     )
 
     # Log steps
@@ -13187,14 +13194,14 @@ def ctt_chatbot(request):
     response["response"] = wait_for_run_completion(client, thread_id, run.id)
 
     if not response["response"]:
-        return Response({"error": "Failed to get response from the assistant."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"error": "Failed to get response from the assistant."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     # Save to ChatHistory
     chat_history = ChatHistory.objects.create(
-        prompt=prompt, 
-        response=response["response"],
-        user=user,
-        email=email
+        prompt=prompt, response=response["response"], user=user, email=email
     )
 
     # Log steps

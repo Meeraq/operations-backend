@@ -516,4 +516,5 @@ urlpatterns = [
     path("batch/<int:batch_id>/add_hr/", views.add_hr_to_batch, name="add_hr_to_batch"),
     path("batch/<int:batch_id>/hrs/", views.get_hrs_of_batch, name="get_hrs_of_batch"),
     path('organisation/<int:organisation_id>/hrs/', views.get_hrs_of_organisation, name='get_hrs_of_organisation'),
+    path("project/<str:project_type>/<int:project_id>/gmsheet/", views.get_gm_sheet_of_project)
 ]
