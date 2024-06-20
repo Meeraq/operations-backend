@@ -24,7 +24,7 @@ def update_schedularbatch_participants(apps, schema_editor):
                     # check if the same email user exists or not
                     user = User.objects.filter(username=participant.email).first()
                     if user:
-                        if user.profile.roles.all().filter(name="learner").exists():
+                        if user.profile.roles.filter(name="learner").exists():
                             learner = Learner.objects.get(user=user.profile)
                             learners.append(learner)
                         else:

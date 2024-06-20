@@ -80,6 +80,11 @@ urlpatterns = [
         name="get_past_sessions",
     ),
     path(
+        "get-all-sessions/<int:batch_id>/",
+        views.get_all_sessions,
+        name="get_all_sessions",
+    ),
+    path(
         "add-attendance-of-session/",
         views.add_attendance_of_session,
         name="add_attendance_of_session",
@@ -88,5 +93,10 @@ urlpatterns = [
         "get-attendance-of-session/<int:session_id>/",
         views.get_attendance_of_session,
         name="get_attendance_of_session",
+    ),
+    path(
+        "send-calendar-invites/",
+        views.send_calendar_invites,
+        name="send_calendar_invites",
     ),
 ]

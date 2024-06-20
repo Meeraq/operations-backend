@@ -43,6 +43,7 @@ from .models import (
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
@@ -1481,7 +1482,9 @@ def get_course_enrollment(request, course_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "curriculum", "coach")]
+)
 def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
@@ -3211,7 +3214,11 @@ class CttFeedbackEmailValidation(APIView):
 
             batch_user = (
                 BatchUsers.objects.using("ctt")
-                .filter(user__email=email, batch__id=ctt_feedback.ctt_batch)
+                .filter(
+                    user__email=email,
+                    batch__id=ctt_feedback.ctt_batch,
+                    deleted_at__isnull=True,
+                )
                 .first()
             )
 
@@ -4363,6 +4370,106 @@ def get_end_meeting_feedback_response_data(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
+def export_feedback_data_to_excel(request):
+    try:
+        coach_session_feedback_responses = (
+            CoachingSessionsFeedbackResponse.objects.all()
+        )
+        data = []
+
+        for coach_session_feedback_response in coach_session_feedback_responses:
+            temp = {}
+            cass_session = coach_session_feedback_response.caas_session
+
+            if cass_session:
+                if cass_session.coach:
+                    coach_name = (
+                        cass_session.coach.first_name
+                        + " "
+                        + cass_session.coach.last_name
+                    )
+                else:
+                    coach_name = None
+
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": coach_name,
+                    "project_name": cass_session.project.name,
+                    "org_name": cass_session.project.organisation.name,
+                    "coachee_name": cass_session.learner.name,
+                    "session_type": cass_session.session_type,
+                    "session_number": cass_session.session_number,
+                    "type": "CAAS",
+                }
+            else:
+                seeq_session = coach_session_feedback_response.schedular_session
+
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": seeq_session.availibility.coach.first_name
+                    + " "
+                    + seeq_session.availibility.coach.last_name,
+                    "project_name": seeq_session.coaching_session.batch.project.name,
+                    "org_name": seeq_session.coaching_session.batch.project.organisation.name,
+                    "coachee_name": seeq_session.learner.name,
+                    "session_type": seeq_session.coaching_session.session_type,
+                    "session_number": seeq_session.coaching_session.coaching_session_number,
+                    "type": "SEEQ",
+                }
+
+            # Add session rating
+            session_rating = None
+            for answer in coach_session_feedback_response.answers.all():
+                if answer.question.type == "rating_1_to_5":
+                    session_rating = answer.rating
+                    break
+            temp["session_rating"] = session_rating
+
+            # Collect all answers
+            for answer in coach_session_feedback_response.answers.all():
+                question_text = answer.question.text
+                if answer.question.type in [
+                    "single_correct_answer",
+                    "multiple_correct_answer",
+                ]:
+                    answer_value = answer.selected_options
+                elif answer.question.type in [
+                    "rating_1_to_5",
+                    "rating_1_to_10",
+                    "rating_0_to_10",
+                ]:
+                    answer_value = answer.rating
+                elif answer.question.type == "descriptive_answer":
+                    answer_value = answer.text_answer
+                else:
+                    answer_value = None  # Handle any unexpected question types
+                temp[question_text] = answer_value
+            data.append(temp)
+
+        # Convert data to pandas DataFrame
+        df = pd.DataFrame(data)
+
+        # Create an in-memory Excel file
+        excel_buffer = BytesIO()
+        df.to_excel(excel_buffer, index=False)
+        excel_buffer.seek(0)
+
+        # Prepare response to return the Excel file as a download
+        response = FileResponse(excel_buffer, filename="feedback_data.xlsx")
+        response["Content-Disposition"] = 'attachment; filename="feedback_data.xlsx"'
+
+        return response
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data", "detail": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_coach_session_feedback_response_data(request, feedback_response_id):
 
@@ -4542,35 +4649,38 @@ def delete_nudge(request, nudge_id):
 @permission_classes([IsAuthenticated])
 def create_ctt_feedback(request):
     try:
-        questions = request.data.get("questions")
-        name = request.data.get("name")
-        session_number = request.data.get("session")
-        batch_id = request.data.get("batch")
-        program = request.data.get("program")
-        question_ids = []
-        for question in questions:
-            options = question.get("options", [])
-            question_instance = Question.objects.create(
-                text=question.get("text"),
-                options=options,
-                type=question.get("type"),
+        with transaction.atomic():
+            questions = request.data.get("questions")
+            name = request.data.get("name")
+            session_number = request.data.get("session")
+            batch_id = request.data.get("batch")
+            program = request.data.get("program")
+            feedback_id = request.data.get("feedback")
+            question_ids = []
+            for question in questions:
+                options = question.get("options", [])
+                question_instance = Question.objects.create(
+                    text=question.get("text"),
+                    options=options,
+                    type=question.get("type"),
+                )
+                question_ids.append(question_instance.id)
+
+            unique_id = uuid.uuid4()
+            feedback = Feedback.objects.get(id=feedback_id)
+            ctt_feedback = CttFeedback.objects.create(
+                name=name,
+                unique_id=unique_id,
+                ctt_batch=batch_id,
+                session_number=session_number,
+                program=program,
+                feedback=feedback,
             )
-            question_ids.append(question_instance.id)
 
-        unique_id = uuid.uuid4()
-
-        ctt_feedback = CttFeedback.objects.create(
-            name=name,
-            unique_id=unique_id,
-            ctt_batch=batch_id,
-            session_number=session_number,
-            program=program,
-        )
-
-        # Add questions to the CttFeedback instance
-        ctt_feedback.questions.set(question_ids)
-        ctt_feedback.save()
-        return Response({"message": "Feedback created successfully!"}, status=200)
+            # Add questions to the CttFeedback instance
+            ctt_feedback.questions.set(question_ids)
+            ctt_feedback.save()
+            return Response({"message": "Feedback created successfully!"}, status=200)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to create feedback"}, status=500)
@@ -4627,8 +4737,11 @@ def get_ctt_feedback(request):
         all_feedback = []
         for ctt_feedback in ctt_feedbacks:
             ctt_batch = Batches.objects.using("ctt").get(id=ctt_feedback.ctt_batch)
+            print(ctt_batch.program.name)
             total_users = (
-                BatchUsers.objects.using("ctt").filter(batch=ctt_batch).count()
+                BatchUsers.objects.using("ctt")
+                .filter(batch=ctt_batch, deleted_at__isnull=True)
+                .count()
             )
             feedback_responses = CttFeedbackResponse.objects.filter(
                 ctt_feedback=ctt_feedback
@@ -4644,7 +4757,7 @@ def get_ctt_feedback(request):
                 "total_responded": feedback_responses,
                 "total_participant": total_users,
                 "unique_id": ctt_feedback.unique_id,
-                "program": ctt_feedback.program,
+                "program_name":  ctt_batch.program.name,
             }
             all_feedback.append(data)
         return Response(all_feedback)
@@ -4838,6 +4951,7 @@ def delete_template(request):
             {"error": "Failed to delete template."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
 
 # @api_view(["GET"])
 # @permission_classes([IsAuthenticated])

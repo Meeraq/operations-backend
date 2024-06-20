@@ -951,6 +951,7 @@ def update_handover(request):
                     "pmo_name": "PMO",
                     "sales_name": handover_instance.sales.name,
                     "sales_number": handover_instance.sales_order_ids,
+                    "organisation":handover_instance.organisation
                 },
                 (
                     bcc_emails
@@ -1170,9 +1171,9 @@ def get_all_Schedular_Projects(request):
             Q(schedularbatch__coaches=coach)
         ).distinct()
 
-    elif hr_id :
+    elif hr_id:
         projects = SchedularProject.objects.filter(
-            Q(hr__id=hr_id) |  Q(schedularbatch__hr__id=hr_id)
+            Q(hr__id=hr_id) | Q(schedularbatch__hr__id=hr_id)
         ).distinct()
     else:
         projects = SchedularProject.objects.all()
@@ -2835,6 +2836,8 @@ def schedule_session(request):
                         "date": date_for_mail,
                         "time": session_time,
                         "booking_id": booking_id,
+                        "project_name": coaching_session.batch.project.name,
+                        "organisation": coaching_session.batch.project.organisation.name,
                     },
                     [],
                 )
@@ -3184,8 +3187,8 @@ def schedule_session_fixed(request):
                             "date": date_for_mail,
                             "time": session_time,
                             "booking_id": booking_id,
-                            "project_name":coaching_session.batch.project.name,
-                            "organisation":coaching_session.batch.project.organisation.name,
+                            "project_name": coaching_session.batch.project.name,
+                            "organisation": coaching_session.batch.project.organisation.name,
                         },
                         [],
                     )
@@ -3492,6 +3495,8 @@ def reschedule_session(request, session_id):
                             "date": date_for_mail,
                             "time": session_time,
                             "booking_id": booking_id,
+                            "project_name": scheduled_session.coaching_session.batch.project.name,
+                            "organisation": scheduled_session.coaching_session.batch.project.organisation.name,
                         },
                         [],
                     )
@@ -4351,7 +4356,9 @@ def project_report_download_live_session_wise(request, project_id, batch_id):
 
         hr_id = request.query_params.get("hr", None)
         if hr_id:
-            sessions.filter(Q(batch__hr__id = hr_id) | Q(batch__project__hr__id=hr_id)).distinct()
+            sessions.filter(
+                Q(batch__hr__id=hr_id) | Q(batch__project__hr__id=hr_id)
+            ).distinct()
 
         dfs = {}
 
@@ -5358,7 +5365,9 @@ def get_live_sessions_by_status(request):
             queryset = LiveSession.objects.all()
     hr_id = request.query_params.get("hr", None)
     if hr_id:
-        queryset = queryset.filter(Q(batch__project__hr__id=hr_id) |  Q(batch__hr__id=hr_id)).distinct()
+        queryset = queryset.filter(
+            Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
+        ).distinct()
 
     facilitator_id = request.query_params.get("facilitator_id", None)
     if facilitator_id:
@@ -6305,7 +6314,8 @@ def get_skill_dashboard_card_data(request, project_id):
             )
             if hr_id:
                 today_sessions = today_sessions.filter(
-                    Q(coaching_session__batch__project__hr__id=hr_id)  | Q(coaching_session__batch__hr__id=hr_id)
+                    Q(coaching_session__batch__project__hr__id=hr_id)
+                    | Q(coaching_session__batch__hr__id=hr_id)
                 ).distinct()
 
             today = timezone.now().date()
@@ -6313,7 +6323,7 @@ def get_skill_dashboard_card_data(request, project_id):
 
             if hr_id:
                 today_live_sessions = today_live_sessions.filter(
-                    Q(batch__project__hr__id=hr_id)  | Q(batch__hr__id = hr_id) 
+                    Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
                 ).distinct()
 
             ongoing_assessment = Assessment.objects.filter(
@@ -6321,14 +6331,20 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                ongoing_assessment = ongoing_assessment.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                ongoing_assessment = ongoing_assessment.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
 
             if hr_id:
-                completed_assessments = completed_assessments.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                completed_assessments = completed_assessments.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
@@ -6360,7 +6376,10 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                today_sessions = today_sessions.filter(Q(coaching_session__batch__project__hr__id=hr_id) | Q(coaching_session__batch__hr__id=hr_id)).distinct()
+                today_sessions = today_sessions.filter(
+                    Q(coaching_session__batch__project__hr__id=hr_id)
+                    | Q(coaching_session__batch__hr__id=hr_id)
+                ).distinct()
 
             today = timezone.now().date()
             today_live_sessions = LiveSession.objects.filter(
@@ -6368,8 +6387,9 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                today_live_sessions = today_live_sessions.filter(Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)).distinct()
-
+                today_live_sessions = today_live_sessions.filter(
+                    Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
+                ).distinct()
 
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False,
@@ -6378,7 +6398,10 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                ongoing_assessment = ongoing_assessment.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                ongoing_assessment = ongoing_assessment.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False,
@@ -6387,7 +6410,10 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                completed_assessments = completed_assessments.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                completed_assessments = completed_assessments.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
@@ -6534,7 +6560,7 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
-        
+
         if hr_id:
             schedular_session = schedular_session.filter(
                 Q(coaching_session__batch__project__hr__id=hr_id)
@@ -6628,8 +6654,10 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
             )
 
         if hr_id:
-            live_sessions = live_sessions.filter(Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)).distinct()
-            
+            live_sessions = live_sessions.filter(
+                Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
+            ).distinct()
+
         upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
 
         upcoming_live_session_data = []
@@ -7187,7 +7215,7 @@ def get_project_wise_progress_data(request, project_id):
                                 learner__id=participant.id,
                             ).first()
                             if schedular_session:
-                                
+
                                 temp[
                                     f"{session_type} {schedular_session.coaching_session.coaching_session_number}"
                                 ] = (
@@ -8956,7 +8984,9 @@ def get_all_action_items(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_action_items_hr(request, hr_id):
-    action_items = ActionItem.objects.filter(Q(batch__project__hr=hr_id) | Q(batch__hr=hr_id)).distinct()
+    action_items = ActionItem.objects.filter(
+        Q(batch__project__hr=hr_id) | Q(batch__hr=hr_id)
+    ).distinct()
     serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
     return Response(serialized_data)
 
