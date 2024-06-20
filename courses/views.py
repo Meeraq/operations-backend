@@ -4649,35 +4649,38 @@ def delete_nudge(request, nudge_id):
 @permission_classes([IsAuthenticated])
 def create_ctt_feedback(request):
     try:
-        questions = request.data.get("questions")
-        name = request.data.get("name")
-        session_number = request.data.get("session")
-        batch_id = request.data.get("batch")
-        program = request.data.get("program")
-        question_ids = []
-        for question in questions:
-            options = question.get("options", [])
-            question_instance = Question.objects.create(
-                text=question.get("text"),
-                options=options,
-                type=question.get("type"),
+        with transaction.atomic():
+            questions = request.data.get("questions")
+            name = request.data.get("name")
+            session_number = request.data.get("session")
+            batch_id = request.data.get("batch")
+            program = request.data.get("program")
+            feedback_id = request.data.get("feedback")
+            question_ids = []
+            for question in questions:
+                options = question.get("options", [])
+                question_instance = Question.objects.create(
+                    text=question.get("text"),
+                    options=options,
+                    type=question.get("type"),
+                )
+                question_ids.append(question_instance.id)
+
+            unique_id = uuid.uuid4()
+            feedback = Feedback.objects.get(id=feedback_id)
+            ctt_feedback = CttFeedback.objects.create(
+                name=name,
+                unique_id=unique_id,
+                ctt_batch=batch_id,
+                session_number=session_number,
+                program=program,
+                feedback=feedback,
             )
-            question_ids.append(question_instance.id)
 
-        unique_id = uuid.uuid4()
-
-        ctt_feedback = CttFeedback.objects.create(
-            name=name,
-            unique_id=unique_id,
-            ctt_batch=batch_id,
-            session_number=session_number,
-            program=program,
-        )
-
-        # Add questions to the CttFeedback instance
-        ctt_feedback.questions.set(question_ids)
-        ctt_feedback.save()
-        return Response({"message": "Feedback created successfully!"}, status=200)
+            # Add questions to the CttFeedback instance
+            ctt_feedback.questions.set(question_ids)
+            ctt_feedback.save()
+            return Response({"message": "Feedback created successfully!"}, status=200)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to create feedback"}, status=500)
@@ -4734,6 +4737,7 @@ def get_ctt_feedback(request):
         all_feedback = []
         for ctt_feedback in ctt_feedbacks:
             ctt_batch = Batches.objects.using("ctt").get(id=ctt_feedback.ctt_batch)
+            print(ctt_batch.program.name)
             total_users = (
                 BatchUsers.objects.using("ctt")
                 .filter(batch=ctt_batch, deleted_at__isnull=True)
@@ -4753,7 +4757,7 @@ def get_ctt_feedback(request):
                 "total_responded": feedback_responses,
                 "total_participant": total_users,
                 "unique_id": ctt_feedback.unique_id,
-                "program": ctt_feedback.program,
+                "program_name": ctt_batch.program.name,
             }
             all_feedback.append(data)
         return Response(all_feedback)
