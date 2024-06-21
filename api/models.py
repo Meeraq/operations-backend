@@ -73,6 +73,8 @@ def get_user_name(user):
             return user.profile.sales.name
         elif role == "ctt_pmo":
             return user.profile.cttpmo.name
+        elif role == "ctt_faculty":
+            return user.profile.cttfaculty.name
         else:
             return "User"
     except Exception as e:
@@ -253,6 +255,16 @@ class Pmo(models.Model):
 
 
 class CTTPmo(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
+    active_inactive = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+    
+class CTTFaculty(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()

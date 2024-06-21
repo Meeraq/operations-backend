@@ -515,5 +515,30 @@ urlpatterns = [
     path("get-booking-id-of-session/", views.get_booking_id_of_session),
     path("batch/<int:batch_id>/add_hr/", views.add_hr_to_batch, name="add_hr_to_batch"),
     path("batch/<int:batch_id>/hrs/", views.get_hrs_of_batch, name="get_hrs_of_batch"),
-    path('organisation/<int:organisation_id>/hrs/', views.get_hrs_of_organisation, name='get_hrs_of_organisation'),
+    path(
+        "organisation/<int:organisation_id>/hrs/",
+        views.get_hrs_of_organisation,
+        name="get_hrs_of_organisation",
+    ),
+    path(
+        "faculty-wise-batch-details/<str:email>/",
+        views.faculty_wise_batch_details,
+        name="faculty_wise_batch_details",
+    ),
+    path(
+        "add-mentoring-session/<int:participant_id>/<int:batch_id>/<int:user_id>/",
+        views.add_mentoring_session,
+        name="add_mentoring_session",
+    ),
+    path(
+        "get-mentoring-session/<int:batch_id>/",
+        views.get_mentoring_session,
+        name="get_mentoring_session",
+    ),
+    path(
+        "get-mentoring-session-of-that-faculty/<int:user_id>/",
+        views.get_mentoring_session_of_that_faculty,
+        name="get_mentoring_session_of_that_faculty",
+    ),
+    path("project/<str:project_type>/<int:project_id>/gmsheet/", views.get_gm_sheet_of_project),
 ]

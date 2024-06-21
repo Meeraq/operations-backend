@@ -4601,7 +4601,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
             print(str(e))
             # Handle specific exceptions if needed
             return Response(
-                {"error": "Faliled to create assessments"},
+                {"error": "Failed to create assessments"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -4694,7 +4694,7 @@ class AssessmentInAssessmentLesson(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Faliled to get data"},
+                {"error": "Failed to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -4725,7 +4725,7 @@ class AllAssessmentInAssessmentLesson(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Faliled to get data"},
+                {"error": "Failed to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

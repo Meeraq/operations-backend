@@ -22,7 +22,7 @@ from api.models import (
     Project,
     Engagement,
 )
-from schedularApi.models import HandoverDetails, GmSheet
+from schedularApi.models import HandoverDetails, GmSheet, Offering
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -1347,7 +1347,7 @@ def fetch_invoices_db():
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales", "leader")])
 def get_all_invoices(request):
     try:
         all_invoices = fetch_invoices_db()
@@ -3031,16 +3031,33 @@ def get_so_for_project(project_id, project_type):
         all_sales_orders = SalesOrderSerializer(
             SalesOrder.objects.filter(salesorder_id__in=sales_order_ids), many=True
         ).data
-        # for salesorder_id in sales_order_ids:
-        #     access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        #     if access_token_sales_order:
-        #         api_url = f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
-        #         auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
-        #         response = requests.get(api_url, headers=auth_header)
-        #         if response.status_code == 200:
-        #             sales_order = response.json().get("salesorder")
-        #             all_sales_orders.append(sales_order)
+        return all_sales_orders
 
+    except Exception as e:
+        print(str(e))
+
+
+def get_sales_order_queryset_for_project(project_id, project_type):
+    try:
+        sales_order_ids_set = set()
+        if project_type == "CAAS" or project_type == "COD":
+            orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                project__id=project_id
+            )
+            for mapping in orders_project_mapping:
+                sales_order_ids_set.update(mapping.sales_order_ids)
+        elif (
+            project_type == "SEEQ"
+            or project_type == "skill_training"
+            or project_type == "assessment"
+        ):
+            orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                schedular_project__id=project_id
+            )
+            for mapping in orders_project_mapping:
+                sales_order_ids_set.update(mapping.sales_order_ids)
+        sales_order_ids = list(sales_order_ids_set)
+        all_sales_orders = SalesOrder.objects.filter(salesorder_id__in=sales_order_ids)
         return all_sales_orders
 
     except Exception as e:
@@ -3421,7 +3438,19 @@ def create_sales_order(request):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
+            JSONString = json.loads(request.data.get("JSONString"))
+
             create_or_update_so(salesorder_created["salesorder_id"])
+            sales_order = SalesOrder.objects.filter(
+                salesorder_id=salesorder_created["salesorder_id"]
+            ).first()
+            if sales_order:
+                sales_order.referred_by = JSONString.get("referredBy", "")
+                sales_order.linkedin_profile = JSONString.get("linkedInProfile", "")
+                sales_order.background = JSONString.get("background", "")
+                sales_order.designation = JSONString.get("designation", "")
+                sales_order.save()
+
             gm_sheet_id = request.data.get("gm_sheet", "")
             if gm_sheet_id:
                 try:
@@ -3847,93 +3876,6 @@ def update_sales_order_status(request, sales_order_id, status):
         return Response(status=404)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def get_total_revenue_and_cost(request, project_id, project_type):
-    try:
-        all_po_id = set()
-        expenses = None
-        if project_type == "SEEQ":
-            expenses = Expense.objects.filter(batch__project__id=project_id)
-        elif project_type == "CAAS":
-            expenses = Expense.objects.filter(session__project__id=project_id)
-        else:
-            return Response(
-                {"error": "Invalid project_type"}, status=status.HTTP_400_BAD_REQUEST
-            )
-        for expense in expenses:
-            all_po_id.add(expense.purchase_order_id)
-        if project_type == "SEEQ":
-            purchase_orders = PurchaseOrder.objects.filter(
-                Q(purchaseorder_id__in=all_po_id) | Q(schedular_project_id=project_id)
-            ).distinct()
-        elif project_type == "CAAS":
-            purchase_orders = PurchaseOrder.objects.filter(
-                Q(purchaseorder_id__in=all_po_id) | Q(caas_project_id=project_id)
-            ).distinct()
-        all_sales_orders = get_so_for_project(project_id, project_type)
-        total = Decimal("0.0")
-        invoiced_amount = Decimal("0.0")
-        not_invoiced_amount = Decimal("0.0")
-        paid_amount = Decimal("0.0")
-        currency_code = None
-        currency_symbol = None
-
-        for sales_order in all_sales_orders:
-            total += Decimal(sales_order["total"])
-            currency_code = sales_order["currency_code"]
-            currency_symbol = sales_order["currency_symbol"]
-
-            for invoice in sales_order["invoices"]:
-                invoiced_amount += Decimal(invoice["total"])
-            not_invoiced_amount += Decimal(sales_order["total"]) - invoiced_amount
-
-            for invoice in sales_order["invoices"]:
-                if invoice["status"] == "paid":
-                    paid_amount += Decimal(invoice["total"])
-
-        purchase_order_cost = Decimal("0.0")
-        purchase_billed_amount = Decimal("0.0")
-        purchase_paid_amount = Decimal("0.0")
-        purchase_all_bills_paid = []
-
-        if purchase_orders.exists():
-            for purchase_order in purchase_orders:
-                purchase_order_cost += (
-                    Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
-                )
-                for bill in purchase_order.bills:
-                    purchase_billed_amount += (
-                        Decimal(str(bill["total"])) * purchase_order.exchange_rate
-                    )
-                    if bill["status"] == "paid":
-                        purchase_paid_amount += Decimal(str(bill["total"]))
-                        purchase_all_bills_paid.append(True)
-                    else:
-                        purchase_all_bills_paid.append(False)
-        profit_percentage = (
-            ((total - purchase_order_cost) / total) * 100 if total > 0 else 0
-        )
-
-        return Response(
-            {
-                "sales_order_cost": total,
-                "invoiced_amount": invoiced_amount,
-                "paid_amount": paid_amount,
-                "currency_code": currency_code,
-                "no_of_sales_orders": len(all_sales_orders),
-                "currency_symbol": currency_symbol,
-                "purchase_order_cost": purchase_order_cost,
-                "purchase_billed_amount": purchase_billed_amount,
-                "purchase_paid_amount": purchase_paid_amount,
-                "purchase_all_bills_paid": purchase_all_bills_paid,
-                "profit_generated": (total - purchase_order_cost),
-                "profit_percentage": profit_percentage,
-            }
-        )
-    except Exception as e:
-        print(str(e))
-        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["GET"])
@@ -3946,13 +3888,13 @@ def get_so_data_of_project(request, project_id, project_type):
         not_invoiced_amount = 0
         paid_amount = 0
         currency_code = None
+        currency_symbol = None
         for sales_order in all_sales_orders:
             total += Decimal(sales_order["total"])
             currency_code = sales_order["currency_code"]
             currency_symbol = sales_order["currency_symbol"]
 
             for invoice in sales_order["invoices"]:
-                print(2, type(invoice["total"]), invoice["total"])
                 invoiced_amount += int(invoice["total"])
             not_invoiced_amount += Decimal(sales_order["total"]) - int(invoiced_amount)
 
@@ -5146,3 +5088,226 @@ def edit_purchase_order(request, po_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update purchase order."}, status=500)
+
+
+def calculate_total_cost(items):
+    return (
+        sum(item["hours"] * item["coach"] * item["price"] for item in items)
+        if items
+        else 0
+    )
+
+
+def calculate_total_revenue(items):
+    return (
+        sum(item["hours"] * item["units"] * item["fees"] for item in items)
+        if items
+        else 0
+    )
+
+
+def fetch_sales_orders_of_project(project_id, project_type):
+    try:
+        sales_order_ids_set = set()
+        if project_type in ["CAAS", "COD"]:
+            project_filter = {"project__id": project_id}
+        else:
+            project_filter = {"schedular_project__id": project_id}
+
+        orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+            **project_filter
+        ).values_list("sales_order_ids", flat=True)
+
+        for sales_order_ids in orders_project_mapping:
+            sales_order_ids_set.update(sales_order_ids)
+
+        sales_order_ids = list(sales_order_ids_set)
+        sales_orders = SalesOrder.objects.filter(
+            salesorder_id__in=sales_order_ids
+        ).only(
+            "id",
+            "total",
+            "currency_code",
+            "currency_symbol",
+            "invoices",
+            "exchange_rate",
+        )
+        return SalesOrderSerializer(sales_orders, many=True).data
+    except Exception as e:
+        print(str(e))
+        return []
+
+
+def fetch_purchase_orders_of_project(project_id, project_type, all_po_id):
+    if project_type == "SEEQ":
+        purchase_order_filter = Q(purchaseorder_id__in=all_po_id) | Q(
+            schedular_project_id=project_id
+        )
+    else:
+        purchase_order_filter = Q(purchaseorder_id__in=all_po_id) | Q(
+            caas_project_id=project_id
+        )
+
+    return (
+        PurchaseOrder.objects.filter(purchase_order_filter)
+        .distinct()
+        .only("total", "exchange_rate", "bills")
+    )
+
+
+def process_expenses(project_id, project_type):
+    if project_type == "SEEQ":
+        return Expense.objects.filter(batch__project__id=project_id).only(
+            "purchase_order_id"
+        )
+    else:
+        return Expense.objects.filter(session__project__id=project_id).only(
+            "purchase_order_id"
+        )
+
+
+def calculate_financials(project_id, project_type):
+    expenses = process_expenses(project_id, project_type)
+    all_po_id = {expense.purchase_order_id for expense in expenses}
+    purchase_orders = fetch_purchase_orders_of_project(
+        project_id, project_type, all_po_id
+    )
+    all_sales_orders = fetch_sales_orders_of_project(project_id, project_type)
+
+    total, invoiced_amount, not_invoiced_amount, paid_amount = (
+        Decimal("0.0"),
+        Decimal("0.0"),
+        Decimal("0.0"),
+        Decimal("0.0"),
+    )
+    currency_code, currency_symbol = None, None
+
+    for sales_order in all_sales_orders:
+        total += Decimal(sales_order["total"]) * Decimal(sales_order["exchange_rate"])
+        if not currency_code:
+            currency_code = sales_order["currency_code"]
+            currency_symbol = sales_order["currency_symbol"]
+        invoiced_amount += sum(Decimal(invoice["total"]) * Decimal(sales_order["exchange_rate"]) for invoice in sales_order["invoices"])
+        not_invoiced_amount += (Decimal(sales_order["total"]) * Decimal(sales_order["exchange_rate"])) - invoiced_amount
+        paid_amount += sum(Decimal(invoice["total"]) * Decimal(sales_order["exchange_rate"]) for invoice in sales_order["invoices"] if invoice["status"] == "paid")
+
+    purchase_order_cost, purchase_billed_amount, purchase_paid_amount = Decimal("0.0"), Decimal("0.0"), Decimal("0.0")
+    purchase_all_bills_paid = []
+
+    for purchase_order in purchase_orders:
+        purchase_order_cost += Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
+        for bill in purchase_order.bills:
+            purchase_billed_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+            if bill["status"] == "paid":
+                purchase_paid_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                purchase_all_bills_paid.append(True)
+            else:
+                purchase_all_bills_paid.append(False)
+
+    profit_percentage = (
+        ((paid_amount - purchase_paid_amount) / paid_amount) * 100
+        if paid_amount > 0
+        else 0
+    )
+
+    gm_sheets = GmSheet.objects.filter(
+        salesorder__in=[sales_order["id"] for sales_order in all_sales_orders]
+    ).distinct()
+    expected_revenue, expected_cost = Decimal("0.0"), Decimal("0.0")
+    expected_currency = None
+
+    for gm_sheet in gm_sheets:
+        expected_currency = gm_sheet.currency
+        offering = Offering.objects.filter(is_won=True, gm_sheet=gm_sheet).first()
+        if offering:
+            expected_revenue += calculate_total_revenue(offering.revenue_structure)
+            expected_cost += calculate_total_cost(offering.cost_structure)
+
+    return {
+        "sales_order_cost": total,
+        "invoiced_amount": invoiced_amount,
+        "paid_amount": paid_amount,
+        "currency_code": "INR",
+        "no_of_sales_orders": len(all_sales_orders),
+        "currency_symbol": currency_symbol,
+        "purchase_order_cost": purchase_order_cost,
+        "purchase_billed_amount": purchase_billed_amount,
+        "purchase_paid_amount": purchase_paid_amount,
+        "purchase_all_bills_paid": purchase_all_bills_paid,
+        "profit_generated": (paid_amount - purchase_paid_amount),
+        "profit_percentage": profit_percentage,
+        "expected_currency": expected_currency,
+        "expected_cost": expected_cost,
+        "expected_revenue": expected_revenue,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_total_revenue_and_cost(request, project_id, project_type):
+    try:
+        financials = calculate_financials(project_id, project_type)
+        return Response(financials)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def all_project_financials(request):
+    try:
+        projects = (
+            Project.objects.all()
+            .select_related("organisation")
+            .only("id", "organisation__name", "name", "project_type")
+        )
+        schedular_projects = (
+            SchedularProject.objects.all()
+            .select_related("organisation")
+            .only("id", "organisation__name", "name", "project_type")
+        )
+
+        combined_projects = [
+            {
+                "project_id": project.id,
+                "project_type": "CAAS",
+                "organisation": project.organisation.name,
+                "name": project.name,
+                "project_type_extra": project.project_type,
+            }
+            for project in projects
+        ] + [
+            {
+                "project_id": schedular_project.id,
+                "project_type": "SEEQ",
+                "organisation": schedular_project.organisation.name,
+                "name": schedular_project.name,
+                "project_type_extra": schedular_project.project_type,
+            }
+            for schedular_project in schedular_projects
+        ]
+
+        res = []
+        for project in combined_projects:
+            project_type = project["project_type"]
+            project_id = project["project_id"]
+            organisation = project["organisation"]
+            project_name = project["name"]
+            project_type_extra = project["project_type_extra"]
+
+            financials = calculate_financials(project_id, project_type)
+            financials.update(
+                {
+                    "organisation": organisation,
+                    "project_name": project_name,
+                    "project_type": project_type_extra,
+                    "id": project_id,
+                }
+            )
+            res.append(financials)
+
+        return Response(res)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
