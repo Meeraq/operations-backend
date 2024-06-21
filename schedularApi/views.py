@@ -110,6 +110,7 @@ from .serializers import (
     EmployeeSerializer,
     GmSheetSalesOrderExistsSerializer,
     FacilitatorContractSerializerNoDepth,
+    MentoringSessionsSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -137,6 +138,7 @@ from .models import (
     Assets,
     Employee,
     FacilitatorContract,
+    MentoringSessions,
 )
 from api.serializers import (
     HrNoDepthSerializer,
@@ -149,7 +151,14 @@ from api.serializers import (
     FacilitatorSerializerWithNps,
     CoachContractSerializer,
 )
-
+from ctt.models import (
+    BatchFaculty,
+    Batches,
+    Sessions,
+    BatchUsers,
+    Faculties,
+    BatchMentorCoach,
+)
 from courses.models import (
     FeedbackLessonResponse,
     QuizLessonResponse,
@@ -1171,9 +1180,9 @@ def get_all_Schedular_Projects(request):
             Q(schedularbatch__coaches=coach)
         ).distinct()
 
-    elif hr_id :
+    elif hr_id:
         projects = SchedularProject.objects.filter(
-            Q(hr__id=hr_id) |  Q(schedularbatch__hr__id=hr_id)
+            Q(hr__id=hr_id) | Q(schedularbatch__hr__id=hr_id)
         ).distinct()
     else:
         projects = SchedularProject.objects.all()
@@ -2836,6 +2845,8 @@ def schedule_session(request):
                         "date": date_for_mail,
                         "time": session_time,
                         "booking_id": booking_id,
+                        "project_name": coaching_session.batch.project.name,
+                        "organisation": coaching_session.batch.project.organisation.name,
                     },
                     [],
                 )
@@ -3185,8 +3196,8 @@ def schedule_session_fixed(request):
                             "date": date_for_mail,
                             "time": session_time,
                             "booking_id": booking_id,
-                            "project_name":coaching_session.batch.project.name,
-                            "organisation":coaching_session.batch.project.organisation.name,
+                            "project_name": coaching_session.batch.project.name,
+                            "organisation": coaching_session.batch.project.organisation.name,
                         },
                         [],
                     )
@@ -3493,6 +3504,8 @@ def reschedule_session(request, session_id):
                             "date": date_for_mail,
                             "time": session_time,
                             "booking_id": booking_id,
+                            "project_name": scheduled_session.coaching_session.batch.project.name,
+                            "organisation": scheduled_session.coaching_session.batch.project.organisation.name,
                         },
                         [],
                     )
@@ -4352,7 +4365,9 @@ def project_report_download_live_session_wise(request, project_id, batch_id):
 
         hr_id = request.query_params.get("hr", None)
         if hr_id:
-            sessions.filter(Q(batch__hr__id = hr_id) | Q(batch__project__hr__id=hr_id)).distinct()
+            sessions.filter(
+                Q(batch__hr__id=hr_id) | Q(batch__project__hr__id=hr_id)
+            ).distinct()
 
         dfs = {}
 
@@ -5359,7 +5374,9 @@ def get_live_sessions_by_status(request):
             queryset = LiveSession.objects.all()
     hr_id = request.query_params.get("hr", None)
     if hr_id:
-        queryset = queryset.filter(Q(batch__project__hr__id=hr_id) |  Q(batch__hr__id=hr_id)).distinct()
+        queryset = queryset.filter(
+            Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
+        ).distinct()
 
     facilitator_id = request.query_params.get("facilitator_id", None)
     if facilitator_id:
@@ -6306,7 +6323,8 @@ def get_skill_dashboard_card_data(request, project_id):
             )
             if hr_id:
                 today_sessions = today_sessions.filter(
-                    Q(coaching_session__batch__project__hr__id=hr_id)  | Q(coaching_session__batch__hr__id=hr_id)
+                    Q(coaching_session__batch__project__hr__id=hr_id)
+                    | Q(coaching_session__batch__hr__id=hr_id)
                 ).distinct()
 
             today = timezone.now().date()
@@ -6314,7 +6332,7 @@ def get_skill_dashboard_card_data(request, project_id):
 
             if hr_id:
                 today_live_sessions = today_live_sessions.filter(
-                    Q(batch__project__hr__id=hr_id)  | Q(batch__hr__id = hr_id) 
+                    Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
                 ).distinct()
 
             ongoing_assessment = Assessment.objects.filter(
@@ -6322,14 +6340,20 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                ongoing_assessment = ongoing_assessment.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                ongoing_assessment = ongoing_assessment.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
 
             if hr_id:
-                completed_assessments = completed_assessments.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                completed_assessments = completed_assessments.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
@@ -6361,7 +6385,10 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                today_sessions = today_sessions.filter(Q(coaching_session__batch__project__hr__id=hr_id) | Q(coaching_session__batch__hr__id=hr_id)).distinct()
+                today_sessions = today_sessions.filter(
+                    Q(coaching_session__batch__project__hr__id=hr_id)
+                    | Q(coaching_session__batch__hr__id=hr_id)
+                ).distinct()
 
             today = timezone.now().date()
             today_live_sessions = LiveSession.objects.filter(
@@ -6369,8 +6396,9 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                today_live_sessions = today_live_sessions.filter(Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)).distinct()
-
+                today_live_sessions = today_live_sessions.filter(
+                    Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
+                ).distinct()
 
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False,
@@ -6379,7 +6407,10 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                ongoing_assessment = ongoing_assessment.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                ongoing_assessment = ongoing_assessment.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False,
@@ -6388,7 +6419,10 @@ def get_skill_dashboard_card_data(request, project_id):
             )
 
             if hr_id:
-                completed_assessments = completed_assessments.filter(Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id)).distinct()
+                completed_assessments = completed_assessments.filter(
+                    Q(hr__id=hr_id)
+                    | Q(assessment_modal__lesson__course__batch__hr__id=hr_id)
+                ).distinct()
 
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
@@ -6535,7 +6569,7 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
-        
+
         if hr_id:
             schedular_session = schedular_session.filter(
                 Q(coaching_session__batch__project__hr__id=hr_id)
@@ -6629,8 +6663,10 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
             )
 
         if hr_id:
-            live_sessions = live_sessions.filter(Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)).distinct()
-            
+            live_sessions = live_sessions.filter(
+                Q(batch__project__hr__id=hr_id) | Q(batch__hr__id=hr_id)
+            ).distinct()
+
         upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
 
         upcoming_live_session_data = []
@@ -7188,7 +7224,7 @@ def get_project_wise_progress_data(request, project_id):
                                 learner__id=participant.id,
                             ).first()
                             if schedular_session:
-                                
+
                                 temp[
                                     f"{session_type} {schedular_session.coaching_session.coaching_session_number}"
                                 ] = (
@@ -8957,7 +8993,9 @@ def get_all_action_items(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_action_items_hr(request, hr_id):
-    action_items = ActionItem.objects.filter(Q(batch__project__hr=hr_id) | Q(batch__hr=hr_id)).distinct()
+    action_items = ActionItem.objects.filter(
+        Q(batch__project__hr=hr_id) | Q(batch__hr=hr_id)
+    ).distinct()
     serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
     return Response(serialized_data)
 
@@ -9412,6 +9450,122 @@ def get_hrs_of_organisation(request, organisation_id):
     hrs = HR.objects.filter(organisation__id=organisation_id)
     serializer = HrNoDepthSerializer(hrs, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def faculty_wise_batch_details(request, email):
+    batch_ids = (
+        BatchFaculty.objects.using("ctt")
+        .filter(faculty__email=email)
+        .values_list("batch_id", flat=True)
+    )
+    batches = (
+        Batches.objects.using("ctt").filter(id__in=batch_ids).order_by("-created_at")
+    )
+    data = []
+    index = 1
+    for batch in batches:
+        total_participants = BatchUsers.objects.using("ctt").filter(batch=batch).count()
+        no_of_sessions = Sessions.objects.using("ctt").filter(batch=batch).count()
+
+        faculty_ids = (
+            BatchFaculty.objects.using("ctt")
+            .filter(batch=batch)
+            .values_list("faculty_id", flat=True)
+        )
+        faculties = Faculties.objects.using("ctt").filter(id__in=faculty_ids)
+        faculty_names = [f"{f.first_name} {f.last_name}" for f in faculties]
+
+        mentor_coach_ids = (
+            BatchMentorCoach.objects.using("ctt")
+            .filter(batch=batch)
+            .values_list("faculty_id", flat=True)
+        )
+        mentor_coaches = Faculties.objects.using("ctt").filter(id__in=mentor_coach_ids)
+        mentor_coach_names = [
+            f"{mc.first_name} {mc.last_name}" for mc in mentor_coaches
+        ]
+
+        batch_data = {
+            "id": batch.id,
+            "index": index,
+            "batch_name": batch.name,
+            "program_name": batch.program.name,
+            "start_date": batch.start_date,
+            "total_participants": total_participants,
+            "no_of_sessions": no_of_sessions,
+            "created_at": batch.created_at,
+        }
+        index += 1
+        data.append(batch_data)
+
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_mentoring_session(request, participant_id, batch_id, user_id):
+    try:
+        data = request.data
+        name = data.get("name")
+        participant_name = data.get("participant_name")
+        date_time = data.get("date_time")
+        status = data.get("status")
+        description = data.get("description")
+        duration = data.get("duration")
+        faculty_id = user_id
+
+        if not all([name, participant_name, date_time, status, duration]):
+            return Response(
+                {"error": "All fields except duration are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        mentoring_session = MentoringSessions.objects.create(
+            name=name,
+            participant_name=participant_name,
+            date_time=date_time,
+            status=status,
+            description=description,
+            duration=duration,
+            participant_id=participant_id,
+            batch_id=batch_id,
+            faculty_id=faculty_id,
+        )
+
+        mentoring_session.save()
+
+        return Response(
+            {"message": "Mentoring Session Created Successfully!"}, status=200
+        )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_mentoring_session(request, batch_id):
+    try:
+        mentoring_sessions = MentoringSessions.objects.filter(batch_id=batch_id)
+        serializer = MentoringSessionsSerializer(mentoring_sessions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_mentoring_session_of_that_faculty(request, user_id):
+    try:
+        mentoring_sessions = MentoringSessions.objects.filter(faculty_id=user_id)
+        serializer = MentoringSessionsSerializer(mentoring_sessions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])

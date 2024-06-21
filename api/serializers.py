@@ -44,6 +44,7 @@ from .models import (
     UserFeedback,
     ChatHistory,
     Curriculum,
+    CTTFaculty,
    
 )
 from django.contrib.auth.models import User
@@ -68,7 +69,12 @@ class CTTPmoDepthOneSerializer(serializers.ModelSerializer):
         model = CTTPmo
         fields = "__all__"
         depth = 1
-
+        
+class CTTFacultyDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTFaculty
+        fields = "__all__"
+        depth = 1
 
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -500,6 +506,11 @@ class PmoSerializerAll(serializers.ModelSerializer):
 class CTTPmoSerializer(serializers.ModelSerializer):
     class Meta:
         model = CTTPmo
+        fields = "__all__"
+        
+class CTTFacultySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTFaculty
         fields = "__all__"
 
 

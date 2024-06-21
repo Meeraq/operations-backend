@@ -22,6 +22,7 @@ from .models import (
     Offering,
     Assets,
     FacilitatorContract,
+    MentoringSessions,
 )
 
 # Register your models here.
@@ -48,3 +49,4 @@ admin.site.register(Offering)
 admin.site.register(Benchmark)
 admin.site.register(Assets)
 admin.site.register(FacilitatorContract)
+admin.site.register(MentoringSessions)
