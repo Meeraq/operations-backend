@@ -21,6 +21,7 @@ from .models import (
     Benchmark,
     Employee,
     FacilitatorContract,
+    MentoringSessions,
 )
 from api.models import Coach
 from api.models import Sales
@@ -320,3 +321,7 @@ class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer)
         model = HandoverDetails
         fields = "__all__"
 
+class MentoringSessionsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MentoringSessions
+        fields = "__all__"

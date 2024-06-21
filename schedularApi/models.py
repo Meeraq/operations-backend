@@ -688,3 +688,23 @@ class Task(models.Model):
 
     def __str__(self):
         return self.task
+
+class MentoringSessions(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+    ]
+    name = models.CharField(max_length=255)
+    participant_name = models.CharField(max_length=255)
+    date_time = models.DateTimeField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
+    description = models.TextField()
+    duration = models.CharField(max_length=50, default=None, null=True, blank=True)
+    batch_id = models.CharField(max_length=50, default=None, null=True, blank=True)
+    faculty_id = models.CharField(max_length=50, default=None, null=True, blank=True)
+    participant_id = models.CharField(max_length=50, default=None, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
