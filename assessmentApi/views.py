@@ -1148,7 +1148,6 @@ def calculate_quiz_response(participant, assessment):
                 participant=participant, assessment=assessment
             )
         except ParticipantResponse.DoesNotExist:
-
             return None
 
         total_questions = assessment.questionnaire.questions.all()
@@ -4429,6 +4428,7 @@ class GetAllAssessments(APIView):
                     else None
                 ),
                 "created_at": assessment.created_at,
+                "is_quiz" : assessment.is_quiz
             }
 
             assessment_list.append(assessment_data)
@@ -5668,3 +5668,21 @@ class GetTempResponseParticipantObserver(APIView):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def assessment_brand_view(request, unique_id):
+    assessment = Assessment.objects.get(unique_id=unique_id)
+    return Response({'brand': assessment.brand})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_participants_assessment_quiz_result(request, assessment_id, participant_id):
+    assessment = Assessment.objects.get(id=assessment_id)
+    participant = Learner.objects.get(id = participant_id)
+    quiz_result =  calculate_quiz_response(participant, assessment)
+    if quiz_result:
+        return Response({'result': quiz_result, "exists" : True})
+    return Response({'exists': False})
