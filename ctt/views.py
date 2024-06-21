@@ -993,12 +993,17 @@ def get_the_profitability_of_a_batch(request, batch_id):
 def get_upcoming_sessions(request):
     try:
         batch_id = request.query_params.get("batch_id")
+        faculty_email = request.query_params.get("faculty_email")
         now = datetime.now()
         upcoming_sessions = (
             Sessions.objects.using("ctt")
             .filter(start_time__gte=now, date__gte=now.date())
             .order_by("date", "start_time")
         )
+        if faculty_email:
+            upcoming_sessions = upcoming_sessions.filter(
+                batch__batchfaculty__faculty__email=faculty_email
+            )
 
         if batch_id:
             upcoming_sessions = upcoming_sessions.filter(
@@ -1045,12 +1050,17 @@ def get_upcoming_sessions(request):
 def get_past_sessions(request):
     try:
         batch_id = request.query_params.get("batch_id")
+        faculty_email = request.query_params.get("faculty_email")
         now = datetime.now()
         past_sessions = (
             Sessions.objects.using("ctt")
             .filter(end_time__lte=now, date__lte=now.date())
             .order_by("-date", "-start_time")
         )
+        if faculty_email:
+            past_sessions = past_sessions.filter(
+                batch__batchfaculty__faculty__email=faculty_email
+            )
 
         if batch_id:
             past_sessions = past_sessions.filter(batch__id=int(batch_id)).order_by(
