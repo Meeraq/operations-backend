@@ -4429,6 +4429,7 @@ class GetAllAssessments(APIView):
                     else None
                 ),
                 "created_at": assessment.created_at,
+                "is_quiz" : assessment.is_quiz
             }
 
             assessment_list.append(assessment_data)
