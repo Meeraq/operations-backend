@@ -3421,7 +3421,19 @@ def create_sales_order(request):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
+            JSONString = json.loads(request.data.get("JSONString"))
+
             create_or_update_so(salesorder_created["salesorder_id"])
+            sales_order = SalesOrder.objects.filter(
+                salesorder_id=salesorder_created["salesorder_id"]
+            ).first()
+            if sales_order:
+                sales_order.referred_by = JSONString.get("referredBy", "")
+                sales_order.linkedin_profile = JSONString.get("linkedInProfile", "")
+                sales_order.background = JSONString.get("background", "")
+                sales_order.designation = JSONString.get("designation", "")
+                sales_order.save()
+
             gm_sheet_id = request.data.get("gm_sheet", "")
             if gm_sheet_id:
                 try:
