@@ -9,6 +9,7 @@ from zohoapi.tasks import (
     fetch_sales_orders,
     fetch_client_invoices,
 )
+from django.template.loader import render_to_string
 from zohoapi.models import SalesOrder
 from collections import defaultdict
 from django.utils import timezone
@@ -17,6 +18,7 @@ from .serializers import (
     FacultiesSerializer,
     SessionsSerializerDepthOne,
 )
+import base64
 from .models import (
     Batches,
     BatchUsers,
@@ -48,7 +50,98 @@ from django.db.models import (
 
 from zohoapi.models import InvoiceData, Vendor, ZohoVendor
 from zohoapi.views import fetch_invoices_db
-from courses.models import CttSessionAttendance
+from courses.models import CttSessionAttendance, CttCalendarInvites
+from api.views import refresh_microsoft_access_token
+from api.models import UserToken
+import requests
+import environ
+
+env = environ.Env()
+
+import json
+
+
+def create_ctt_outlook_calendar_invite(
+    subject,
+    description,
+    start_time_stamp,
+    end_time_stamp,
+    attendees,
+    user_email,
+    ctt_session_id,
+    ctt_user_id,
+    meeting_location,
+    start_date,
+    end_date,
+    recurrence_type=None,  # Added recurrence type parameter
+):
+    event_create_url = "https://graph.microsoft.com/v1.0/me/events"
+    try:
+        user_token = UserToken.objects.get(user_profile__user__username=user_email)
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+        start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)
+        end_datetime_obj = datetime.fromtimestamp(int(end_time_stamp) / 1000)
+        start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:%S")
+        end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:%S")
+
+        event_payload = {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": description},
+            "start": {"dateTime": start_datetime, "timeZone": "Asia/Kolkata"},
+            "end": {"dateTime": end_datetime, "timeZone": "Asia/Kolkata"},
+            "attendees": attendees,
+            "location": {"displayName": meeting_location if meeting_location else ""},
+        }
+
+        if recurrence_type:
+            event_payload["recurrence"] = {
+                "pattern": {
+                    "type": "weekly",
+                    "interval": 1,
+                    "daysOfWeek": [start_datetime_obj.strftime("%A").capitalize()],
+                },
+                "range": {
+                    "type": "endDate",
+                    "startDate": start_date,
+                    "endDate": end_date,
+                    "recurrenceTimeZone": "Asia/Kolkata",
+                },
+            }
+
+        response = requests.post(event_create_url, json=event_payload, headers=headers)
+        if response.status_code == 201:
+            microsoft_response_data = response.json()
+            calendar_invite = CttCalendarInvites(
+                event_id=microsoft_response_data.get("id"),
+                title=subject,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                attendees=attendees,
+                creator=user_email,
+                ctt_session=ctt_session_id,
+                ctt_user=ctt_user_id,
+            )
+            calendar_invite.save()
+            print("Calendar invite sent successfully.")
+            return True
+        else:
+            print(f"Calendar invitation failed. Status code: {response.status_code}")
+            print(response.text, response)
+            return False
+
+    except UserToken.DoesNotExist:
+        print(f"User token not found for email: {user_email}")
+        return False
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return False
 
 
 def get_month_start_end_dates():
@@ -97,7 +190,11 @@ def batch_details(request):
     data = []
     index = 1
     for batch in batches:
-        total_participants = BatchUsers.objects.using("ctt").filter(batch=batch).count()
+        total_participants = (
+            BatchUsers.objects.using("ctt")
+            .filter(batch=batch, deleted_at__isnull=True)
+            .count()
+        )
         no_of_sessions = Sessions.objects.using("ctt").filter(batch=batch).count()
         faculty_ids = (
             BatchFaculty.objects.using("ctt")
@@ -138,7 +235,11 @@ def batch_details(request):
 @permission_classes([IsAuthenticated])
 def participant_details(request):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
+        batch_users = (
+            BatchUsers.objects.using("ctt")
+            .filter(deleted_at__isnull=True)
+            .order_by("-created_at")
+        )
         data = []
         index = 1
 
@@ -452,7 +553,7 @@ def get_faculties(request):
 
     participant_counts = (
         BatchUsers.objects.using("ctt")
-        .filter(batch_id__in=batch_ids)
+        .filter(batch_id__in=batch_ids, deleted_at__isnull=True)
         .values("batch_id")
         .annotate(count=Count("id"))
     )
@@ -581,7 +682,7 @@ def get_all_finance(request):
         batch_users = (
             BatchUsers.objects.using("ctt")
             .select_related("user", "batch__program")
-            .all()
+            .filter(deleted_at__isnull=True)
             .order_by("-created_at")
         )
 
@@ -720,9 +821,10 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
 @permission_classes([IsAuthenticated])
 def get_participants_of_that_batch(request, batch_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").filter(batch__id=batch_id, deleted_at__isnull=False)
+        batch_users = BatchUsers.objects.using("ctt").filter(
+            batch__id=batch_id, deleted_at__isnull=True
+        )
         data = []
-        print(batch_users,batch_users.count(),batch_id)
         index = 1
         for batch_user in batch_users:
             batch_name = batch_user.batch.name
@@ -785,7 +887,11 @@ def get_participants_of_that_batch(request, batch_id):
 @permission_classes([IsAuthenticated])
 def get_ctt_salesperson_individual(request, salesperson_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
+        batch_users = (
+            BatchUsers.objects.using("ctt")
+            .filter(deleted_at__isnull=True)
+            .order_by("-created_at")
+        )
         data = []
         index = 1
         for batch_user in batch_users:
@@ -859,7 +965,12 @@ def get_ctt_salesperson_individual(request, salesperson_id):
 def get_card_data_for_dashboard_ctt(request):
     try:
         batches = Batches.objects.using("ctt").all().count()
-        unique_users_count = BatchUsers.objects.using("ctt").count()
+        unique_users_count = (
+            BatchUsers.objects.using("ctt")
+            .filter(deleted_at__isnull=True)
+            .distinct()
+            .count()
+        )
         faculties = Faculties.objects.using("ctt").all().count()
 
         return Response(
@@ -1103,6 +1214,23 @@ def get_past_sessions(request):
         return Response({"error": str(e)}, status=500)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sessions(request, batch_id):
+    try:
+        now = datetime.now()
+        sessions = (
+            Sessions.objects.using("ctt")
+            .filter(start_time__gte=now, date__gte=now.date(), batch__id=int(batch_id))
+            .order_by("date", "start_time")
+        )
+        serializer = SessionsSerializerDepthOne(sessions, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_attendance_of_session(request):
@@ -1140,3 +1268,140 @@ def get_attendance_of_session(request, session_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
+
+
+def get_the_meeting_details_based_on_level(certification_name):
+    try:
+        image_path = None
+        template = None
+        if certification_name == "Level 1":
+            image_path = "templates/ctt_images/level_1_image.png"
+            template = "ctt_templates/level_1.html"
+        elif certification_name == "Level 2 / PCC Bridge":
+            image_path = "templates/ctt_images/level_2_image.png"
+            template = "ctt_templates/level_2.html"
+        elif certification_name == "MCCP":
+            image_path = "templates/ctt_images/mccp_image.png"
+            template = "ctt_templates/actc.html"
+        elif certification_name == "ACTC":
+            image_path = "templates/ctt_images/actc_image.png"
+            template = "ctt_templates/mccp.html"
+
+        image_base64 = None
+        if image_path:
+            with open(image_path, "rb") as image_file:
+                image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
+
+        return image_base64, template
+    except Exception as e:
+        print(str(e))
+        return None, None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_calendar_invites(request):
+    try:
+        batch_id = request.data.get("batch_id", [])
+        meeting_link = request.data.get("meeting_link", None)
+        meeting_id = request.data.get("meeting_id", None)
+        meeting_passcode = request.data.get("meeting_passcode", None)
+        if meeting_link:
+            all_sessions = Sessions.objects.using("ctt").filter(batch__id=batch_id)
+            all_sessions_array = [
+                {
+                    "name": f"Session {session.session_no}",
+                    "date": session.date.strftime("%d/%m/%Y"),
+                    "timing": f"{session.start_time.strftime('%I:%M %p')} to {session.end_time.strftime('%I:%M %p')} IST",
+                }
+                for session in all_sessions
+            ]
+            session = all_sessions.first()
+
+            if session:
+                batch = session.batch
+                certification_name = session.batch.program.certification_level.name
+                course_start_date = session.batch.start_date.strftime("%d/%m/%Y")
+                course_end_date = session.batch.end_date.strftime("%d/%m/%Y")
+                batch_name = session.batch.name
+                program_name = session.batch.program.name
+                session_timing = f"{session.start_time.strftime('%I:%M %p')} to {session.end_time.strftime('%I:%M %p')} IST"
+                total_sessions_to_book = len(all_sessions)
+                faculty_ids = (
+                    BatchFaculty.objects.using("ctt")
+                    .filter(batch=batch)
+                    .values_list("faculty_id", flat=True)
+                )
+                faculties = Faculties.objects.using("ctt").filter(id__in=faculty_ids)
+                faculty_names = [f.first_name + " " + f.last_name for f in faculties]
+                faculty_names_str = ", ".join(faculty_names)
+
+                start_datetime = datetime.combine(session.date, session.start_time)
+                end_datetime = datetime.combine(session.date, session.end_time)
+                start_time_stamp = int(start_datetime.timestamp()) * 1000
+                end_time_stamp = int(end_datetime.timestamp()) * 1000
+
+                image_base64, selected_template = (
+                    get_the_meeting_details_based_on_level(certification_name)
+                )
+                batch_userss = BatchUsers.objects.using("ctt").filter(
+                    batch=batch, deleted_at__isnull=True
+                )
+                for batch_users in batch_userss:
+                    description = render_to_string(
+                        selected_template,
+                        {
+                            "faculty_names_str": faculty_names_str,
+                            "course_start_date": course_start_date,
+                            "course_end_date": course_end_date,
+                            "batch_name": batch_name,
+                            "program_name": program_name,
+                            "session_timing": session_timing,
+                            "total_sessions_to_book": total_sessions_to_book,
+                            "all_sessions_array": all_sessions_array,
+                            "image_base64": image_base64,
+                            "meeting_link": meeting_link,
+                            "day_of_week": start_datetime.strftime("%A").capitalize(),
+                            "name": batch_users.user.first_name,
+                            "meeting_id": meeting_id,
+                            "meeting_passcode": meeting_passcode,
+                        },
+                    )
+
+                    if description:
+
+                        try:
+                            create_ctt_outlook_calendar_invite(
+                                f"Coach-To-Transformation| {batch_name} | Calendar Invite",
+                                description,
+                                start_time_stamp,
+                                end_time_stamp,
+                                [
+                                    {
+                                        "emailAddress": {
+                                            "address": (
+                                                batch_users.user.email
+                                                if env("ENVIRONMENT") == "PRODUCTION:"
+                                                else "naveen@meeraaq.com"
+                                            ),
+                                        },
+                                        "type": "required",
+                                    }
+                                ],
+                                env("COACHING_CALENDAR_INVITATION_ORGANIZER"),
+                                session.id,
+                                batch_users.user.id,
+                                meeting_link if meeting_link else None,
+                                session.batch.start_date.strftime("%Y-%m-%d"),
+                                session.batch.end_date.strftime("%Y-%m-%d"),
+                                "weekly",
+                            )
+
+                        except Exception as e:
+                            print(str(e))
+
+                return Response({"message": "Invites sent successfully!"}, status=200)
+        return Response({"error": "Failed to send invites"}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to send invites"}, status=500)

@@ -112,8 +112,8 @@ def password_reset_token_created(
         )
         return None
     else:
-        learner_roles = user.profile.roles.all().filter(name="learner")
-        hr_roles = user.profile.roles.all().filter(name="hr")
+        learner_roles = user.profile.roles.filter(name="learner")
+        hr_roles = user.profile.roles.filter(name="hr")
         if learner_roles.exists():
             engagements = Engagement.objects.filter(
                 learner=user.profile.learner,
@@ -133,7 +133,7 @@ def password_reset_token_created(
         elif app_name == "zoho":
             link = f"{env('ZOHO_APP_URL')}/reset-password/{reset_password_token.key}"
             # not sending when requested from vendor portal but user is not vendor in our system
-            if not user.profile.roles.all().filter(name="vendor").exists():
+            if not user.profile.roles.filter(name="vendor").exists():
                 return None
         else:
             link = f"{env('APP_URL')}/create-password/{reset_password_token.key}"

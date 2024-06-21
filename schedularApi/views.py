@@ -2844,6 +2844,8 @@ def schedule_session(request):
                         "date": date_for_mail,
                         "time": session_time,
                         "booking_id": booking_id,
+                        "project_name": coaching_session.batch.project.name,
+                        "organisation": coaching_session.batch.project.organisation.name,
                     },
                     [],
                 )
@@ -3501,6 +3503,8 @@ def reschedule_session(request, session_id):
                             "date": date_for_mail,
                             "time": session_time,
                             "booking_id": booking_id,
+                            "project_name": scheduled_session.coaching_session.batch.project.name,
+                            "organisation": scheduled_session.coaching_session.batch.project.organisation.name,
                         },
                         [],
                     )
