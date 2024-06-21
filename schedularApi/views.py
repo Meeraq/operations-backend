@@ -961,6 +961,7 @@ def update_handover(request):
                     "pmo_name": "PMO",
                     "sales_name": handover_instance.sales.name,
                     "sales_number": handover_instance.sales_order_ids,
+                    "organisation":handover_instance.organisation
                 },
                 (
                     bcc_emails

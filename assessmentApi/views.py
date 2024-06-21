@@ -659,6 +659,10 @@ class AssessmentView(APIView):
             assessment.assessment_start_date = request.data.get("assessment_start_date")
             assessment.whatsapp_reminder = request.data.get("whatsapp_reminder")
             assessment.email_reminder = request.data.get("email_reminder")
+            assessment.shuffle_questions = request.data.get("shuffle_questions")
+            assessment.is_quiz = request.data.get("is_quiz")
+            assessment.passing_percentage = request.data.get("passing_percentage")
+            assessment.brand = request.data.get("brand")
             assessment.reminders = request.data.get("reminders")
             assessment.assessment_timing = request.data.get("assessment_timing")
             if request.data.get("assessment_timing") == "post":
@@ -1030,7 +1034,18 @@ class QuestionsForAssessment(APIView):
                 else:
                     competency_questions[competency_name] = [full_question]
 
-            return Response(competency_questions, status=status.HTTP_200_OK)
+            # Shuffle the questions within each competency
+            for competency in competency_questions:
+                random.shuffle(competency_questions[competency])
+
+            # Shuffle the keys of the competency_questions dictionary
+            shuffled_competency_questions = {}
+            keys = list(competency_questions.keys())
+            random.shuffle(keys)
+            for key in keys:
+                shuffled_competency_questions[key] = competency_questions[key]
+
+            return Response(shuffled_competency_questions, status=status.HTTP_200_OK)
 
         except Assessment.DoesNotExist:
             return Response(
@@ -1126,6 +1141,38 @@ class ObserverAssessment(APIView):
             )
 
 
+def calculate_quiz_response(participant, assessment):
+    try:
+        try:
+            response = ParticipantResponse.objects.get(
+                participant=participant, assessment=assessment
+            )
+        except ParticipantResponse.DoesNotExist:
+            return None
+
+        total_questions = assessment.questionnaire.questions.all()
+        total_questions_count = total_questions.count()
+        correct_answers_count = 0
+        participant_response = response.participant_response
+
+        for key, value in participant_response.items():
+            try:
+                question = total_questions.get(id=key)
+                if str(value) in question.correct_answer:
+                    correct_answers_count += 1
+            except Question.DoesNotExist:
+                continue
+
+        return {
+            "total_questions_count": total_questions_count,
+            "correct_answers_count": correct_answers_count,
+            "passing_percentage": assessment.passing_percentage,
+        }
+    except Exception as e:
+        print(str(e))
+        pass
+
+
 class CreateParticipantResponseView(APIView):
     permission_classes = [AllowAny]
 
@@ -1155,6 +1202,7 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
+
             try:
                 if assessment.assessment_type == "self" and assessment.automated_result:
                     encoded_image = None
@@ -1200,12 +1248,19 @@ class CreateParticipantResponseView(APIView):
             except Exception as e:
                 print(str(e))
 
+            response = {"message": "Submit Successfully."}
+            if assessment.is_quiz:
+                response["quiz_response"] = calculate_quiz_response(
+                    participant, assessment
+                )
+
             return Response(
-                {"message": "Submit Successfully."},
+                response,
                 status=status.HTTP_200_OK,
             )
 
         except Exception as e:
+            print("e", str(e))
             return Response(
                 {"error": "Failed to Submit."}, status=status.HTTP_404_NOT_FOUND
             )
@@ -4322,7 +4377,9 @@ class GetAllAssessments(APIView):
         assessments = []
         if hr_id:
             assessments = Assessment.objects.filter(
-                Q(hr__id=int(hr_id)) | Q(assessment_modal__lesson__course__batch__hr__id=int(hr_id)), Q(status="ongoing") | Q(status="completed")
+                Q(hr__id=int(hr_id))
+                | Q(assessment_modal__lesson__course__batch__hr__id=int(hr_id)),
+                Q(status="ongoing") | Q(status="completed"),
             ).distinct()
         elif pmo and pmo.sub_role == "junior_pmo":
             assessments = Assessment.objects.filter(
@@ -4371,6 +4428,7 @@ class GetAllAssessments(APIView):
                     else None
                 ),
                 "created_at": assessment.created_at,
+                "is_quiz" : assessment.is_quiz
             }
 
             assessment_list.append(assessment_data)
@@ -4400,9 +4458,15 @@ class GetAssessmentsOfHr(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, hr_id):
-        assessments = Assessment.objects.filter(
-            Q(hr__id=hr_id) | Q(assessment_modal__lesson__course__batch__hr__id = hr_id), Q(status="ongoing") | Q(status="completed")
-        ).order_by("-created_at").distinct()
+        assessments = (
+            Assessment.objects.filter(
+                Q(hr__id=hr_id)
+                | Q(assessment_modal__lesson__course__batch__hr__id=hr_id),
+                Q(status="ongoing") | Q(status="completed"),
+            )
+            .order_by("-created_at")
+            .distinct()
+        )
         assessment_list = []
         for assessment in assessments:
             total_responses_count = ParticipantResponse.objects.filter(
@@ -4537,7 +4601,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
             print(str(e))
             # Handle specific exceptions if needed
             return Response(
-                {"error": "Faliled to create assessments"},
+                {"error": "Failed to create assessments"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -4630,7 +4694,7 @@ class AssessmentInAssessmentLesson(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Faliled to get data"},
+                {"error": "Failed to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -4661,7 +4725,7 @@ class AllAssessmentInAssessmentLesson(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Faliled to get data"},
+                {"error": "Failed to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -4949,7 +5013,9 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
             for schedular_project in schedular_projects:
                 batches = SchedularBatch.objects.filter(project=schedular_project)
                 if hr_id:
-                    batches  = batches.filter(Q(project__hr__id=hr_id)| Q(hr__id=hr_id)).distinct()
+                    batches = batches.filter(
+                        Q(project__hr__id=hr_id) | Q(hr__id=hr_id)
+                    ).distinct()
 
                 for batch in batches:
                     assessments = Assessment.objects.filter(
@@ -5602,3 +5668,21 @@ class GetTempResponseParticipantObserver(APIView):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def assessment_brand_view(request, unique_id):
+    assessment = Assessment.objects.get(unique_id=unique_id)
+    return Response({'brand': assessment.brand})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_participants_assessment_quiz_result(request, assessment_id, participant_id):
+    assessment = Assessment.objects.get(id=assessment_id)
+    participant = Learner.objects.get(id = participant_id)
+    quiz_result =  calculate_quiz_response(participant, assessment)
+    if quiz_result:
+        return Response({'result': quiz_result, "exists" : True})
+    return Response({'exists': False})

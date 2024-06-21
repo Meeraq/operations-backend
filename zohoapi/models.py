@@ -924,6 +924,11 @@ class SalesOrder(models.Model):
     )
     balance_formatted = models.CharField(max_length=20, blank=True, null=True)
     approvers_list = models.JSONField(default=list, blank=True, null=True)
+    referred_by = models.CharField(max_length=225, blank=True, null=True)
+    linkedin_profile = models.CharField(max_length=225, blank=True, null=True)
+    background = models.CharField(max_length=225, blank=True, null=True)
+    designation = models.CharField(max_length=225, blank=True, null=True)
+    
 
     class Meta:
         ordering = ["-created_time"]
