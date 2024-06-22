@@ -678,6 +678,7 @@ def get_all_faculties(request):
 def get_all_finance(request):
     try:
         salesperson_id = request.query_params.get("salesperson_id", None)
+        salesperson_id_sales = request.query_params.get("salesperson_id_sales", None)
 
         batch_users = (
             BatchUsers.objects.using("ctt")
@@ -688,7 +689,7 @@ def get_all_finance(request):
 
         # Convert batch_users emails to a list to avoid subquery across different databases
         user_emails = list(batch_users.values_list("user__email", flat=True))
-        if salesperson_id:
+        if salesperson_id or salesperson_id_sales:
             salesorders = SalesOrder.objects.filter(
                 zoho_customer__email__in=user_emails, salesperson_id=salesperson_id
             ).select_related("zoho_customer")
@@ -702,6 +703,11 @@ def get_all_finance(request):
         # user_assignments = UserAssignments.objects.using("ctt").all()
         assignments = Assignments.objects.using("ctt").all()
         for batch_user in batch_users:
+            if salesperson_id_sales:
+                salesorders.filter(zoho_customer__email=batch_user.user.email)
+                if salesorders.count() == 0:
+                    continue
+
             user_email = batch_user.user.email
             batch_name = batch_user.batch.name
             user_salesorders = [
