@@ -2781,7 +2781,7 @@ def generate_otp(request):
             pass
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
-        print("otp",otp)
+        
         created_otp = OTP.objects.create(user=user, otp=otp)
         print("created_otp",created_otp)
         user_data = get_user_data(user)
