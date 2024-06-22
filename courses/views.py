@@ -4696,6 +4696,7 @@ def edit_ctt_feedback(request, feedback_id):
         name = request.data.get("name")
         session_number = request.data.get("session")
         batch_id = request.data.get("batch")
+        program = request.data.get("program")
 
         question_ids = []
         for question in questions:
@@ -4719,6 +4720,7 @@ def edit_ctt_feedback(request, feedback_id):
         feedback.unique_id = unique_id
         feedback.ctt_batch = batch_id
         feedback.session_number = session_number
+        feedback.program = program
         # Add questions to the CttFeedback instance
         feedback.questions.set(question_ids)
         feedback.save()
@@ -4737,7 +4739,7 @@ def get_ctt_feedback(request):
         all_feedback = []
         for ctt_feedback in ctt_feedbacks:
             ctt_batch = Batches.objects.using("ctt").get(id=ctt_feedback.ctt_batch)
-            print(ctt_batch.program.name)
+
             total_users = (
                 BatchUsers.objects.using("ctt")
                 .filter(batch=ctt_batch, deleted_at__isnull=True)
@@ -4757,7 +4759,9 @@ def get_ctt_feedback(request):
                 "total_responded": feedback_responses,
                 "total_participant": total_users,
                 "unique_id": ctt_feedback.unique_id,
-                "program_name":  ctt_batch.program.name,
+                "program_name": ctt_batch.program.name,
+                "program": ctt_feedback.program if ctt_feedback.program else None,
+                "feedback": ctt_feedback.feedback.id if ctt_feedback.feedback else None,
             }
             all_feedback.append(data)
         return Response(all_feedback)
