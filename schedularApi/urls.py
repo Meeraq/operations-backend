@@ -531,6 +531,11 @@ urlpatterns = [
         name="add_mentoring_session",
     ),
     path(
+        "update-mentoring-session/<int:session_id>/<int:user_id>/",
+        views.update_mentoring_session,
+        name="update_mentoring_session",
+    ),
+    path(
         "get-mentoring-session/<int:batch_id>/",
         views.get_mentoring_session,
         name="get_mentoring_session",
