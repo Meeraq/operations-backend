@@ -4675,10 +4675,11 @@ def create_ctt_feedback(request):
                 session_number=session_number,
                 program=program,
                 feedback=feedback,
+
             )
 
             # Add questions to the CttFeedback instance
-            ctt_feedback.questions.set(question_ids)
+            ctt_feedback.questions.set(feedback.questions.all())
             ctt_feedback.save()
             return Response({"message": "Feedback created successfully!"}, status=200)
     except Exception as e:
