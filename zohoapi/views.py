@@ -3113,12 +3113,14 @@ def get_ctt_sales_orders(request):
 @permission_classes([IsAuthenticated])
 def get_ctt_client_invoices_for_participant(request, participant_email, batch_name):
     try:
+        client_invoices = ClientInvoice.objects.filter(
+            custom_field_hash__cf_ctt_batch=batch_name,
+            zoho_customer__email=participant_email,
+            sales_order__custom_field_hash__cf_ctt_batch=batch_name,
+        )
+      
         all_client_invoices = ClientInvoiceGetSerializer(
-            ClientInvoice.objects.filter(
-                custom_field_hash__cf_ctt_batch=batch_name,
-                zoho_customer__email=participant_email,
-                sales_order__custom_field_hash__cf_ctt_batch=batch_name,
-            )
+            client_invoices, many=True
         ).data
         return Response(all_client_invoices)
     except Exception as e:
@@ -3874,8 +3876,6 @@ def update_sales_order_status(request, sales_order_id, status):
     except Exception as e:
         print(str(e))
         return Response(status=404)
-
-
 
 
 @api_view(["GET"])
@@ -5187,19 +5187,38 @@ def calculate_financials(project_id, project_type):
         if not currency_code:
             currency_code = sales_order["currency_code"]
             currency_symbol = sales_order["currency_symbol"]
-        invoiced_amount += sum(Decimal(invoice["total"]) * Decimal(sales_order["exchange_rate"]) for invoice in sales_order["invoices"])
-        not_invoiced_amount += (Decimal(sales_order["total"]) * Decimal(sales_order["exchange_rate"])) - invoiced_amount
-        paid_amount += sum(Decimal(invoice["total"]) * Decimal(sales_order["exchange_rate"]) for invoice in sales_order["invoices"] if invoice["status"] == "paid")
+        invoiced_amount += sum(
+            Decimal(invoice["total"]) * Decimal(sales_order["exchange_rate"])
+            for invoice in sales_order["invoices"]
+        )
+        not_invoiced_amount += (
+            Decimal(sales_order["total"]) * Decimal(sales_order["exchange_rate"])
+        ) - invoiced_amount
+        paid_amount += sum(
+            Decimal(invoice["total"]) * Decimal(sales_order["exchange_rate"])
+            for invoice in sales_order["invoices"]
+            if invoice["status"] == "paid"
+        )
 
-    purchase_order_cost, purchase_billed_amount, purchase_paid_amount = Decimal("0.0"), Decimal("0.0"), Decimal("0.0")
+    purchase_order_cost, purchase_billed_amount, purchase_paid_amount = (
+        Decimal("0.0"),
+        Decimal("0.0"),
+        Decimal("0.0"),
+    )
     purchase_all_bills_paid = []
 
     for purchase_order in purchase_orders:
-        purchase_order_cost += Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
+        purchase_order_cost += (
+            Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
+        )
         for bill in purchase_order.bills:
-            purchase_billed_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+            purchase_billed_amount += (
+                Decimal(str(bill["total"])) * purchase_order.exchange_rate
+            )
             if bill["status"] == "paid":
-                purchase_paid_amount += Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                purchase_paid_amount += (
+                    Decimal(str(bill["total"])) * purchase_order.exchange_rate
+                )
                 purchase_all_bills_paid.append(True)
             else:
                 purchase_all_bills_paid.append(False)

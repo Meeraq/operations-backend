@@ -874,6 +874,7 @@ def get_participants_of_that_batch(request, batch_id):
             user_data = {
                 "index": index,
                 "batch_user_id": batch_user.id,
+                "user_id":batch_user.user.id,
                 "name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
                 "email": batch_user.user.email,
                 "phone_number": batch_user.user.phone,
@@ -889,9 +890,10 @@ def get_participants_of_that_batch(request, batch_id):
             index += 1
             data.append(user_data)
         return Response(data)
-    except BatchUsers.DoesNotExist:
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"message": "Batch users not found for the given batch ID"}, status=404
+            {"message": "Batch users not found for the given batch ID"}, status=500
         )
 
 
