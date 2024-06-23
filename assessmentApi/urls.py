@@ -388,4 +388,14 @@ urlpatterns = [
         "automate-result-change/<int:assessment_id>/",
         AutomateResultChange.as_view(),
     ),
+    path(
+        "assessment/<str:unique_id>/brand/",
+        views.assessment_brand_view,
+        name="assessment-brand",
+    ),
+    path(
+        "quiz-result/assessment/<int:assessment_id>/participant/<int:participant_id>/",
+        views.get_participants_assessment_quiz_result,
+        name="get_participants_assessment_quiz_result",
+    ),
 ]

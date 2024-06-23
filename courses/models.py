@@ -385,8 +385,10 @@ class CttFeedback(models.Model):
     session_number = models.IntegerField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE, blank=True, null=True)
-    program = models.CharField(max_length=255,choices=PROGRAM_CHOICES, default="")
+    feedback = models.ForeignKey(
+        Feedback, on_delete=models.CASCADE, blank=True, null=True
+    )
+    program = models.CharField(max_length=255, choices=PROGRAM_CHOICES, default="")
 
 
 class CttFeedbackResponse(models.Model):
@@ -404,3 +406,15 @@ class CttSessionAttendance(models.Model):
     attendance = models.JSONField(default=list, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class CttCalendarInvites(models.Model):
+    event_id = models.TextField(blank=True, null=True)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    start_datetime = models.CharField(max_length=255, blank=True, null=True)
+    end_datetime = models.CharField(max_length=255, blank=True, null=True)
+    attendees = models.JSONField(blank=True, null=True)
+    creator = models.CharField(max_length=255, blank=True, null=True)
+    ctt_session = models.IntegerField(blank=True, null=True)
+    ctt_user = models.IntegerField(blank=True, null=True)

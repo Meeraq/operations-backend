@@ -76,6 +76,8 @@ from .serializers import (
     PmoSerializerAll,
     CTTPmoSerializer,
     CTTPmoDepthOneSerializer,
+    CTTFacultySerializer,
+    CTTFacultyDepthOneSerializer,
     ProjectDepthTwoSerializerArchiveCheck,
     CustomUserSerializer,
     SalesSerializer,
@@ -126,6 +128,7 @@ from .models import (
     Leader,
     Pmo,
     CTTPmo,
+    CTTFaculty,
     Coach,
     OTP,
     Project,
@@ -1163,9 +1166,9 @@ FIELD_NAME_VALUES = {
     "product_type": "Product Type",
     "category": "Category",
     "asset_location": "Location",
-    "coaching_type":"Coaching Type",
-    "credentials_feels_like":"Credential Feels Like",
-    "competency":"Competency"
+    "coaching_type": "Coaching Type",
+    "credentials_feels_like": "Credential Feels Like",
+    "competency": "Competency",
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -1390,6 +1393,42 @@ def edit_ctt_pmo(request, ctt_pmo_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update CTT PMO."}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny, IsInRoles("superadmin")])
+def edit_ctt_faculty(request, ctt_faculty_id):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    ctt_faculty = CTTFaculty.objects.get(id=ctt_faculty_id)
+
+    try:
+        with transaction.atomic():
+            existing_user = (
+                User.objects.filter(username=email)
+                .exclude(username=ctt_faculty.user.user.username)
+                .first()
+            )
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            ctt_faculty.user.user.username = email
+            ctt_faculty.user.user.email = email
+            ctt_faculty.user.user.save()
+            ctt_faculty.email = email
+            ctt_faculty.name = name
+            ctt_faculty.phone = phone
+            ctt_faculty.save()
+            if ctt_faculty.phone:
+                add_contact_in_wati("pmo", ctt_faculty.name, ctt_faculty.phone)
+
+            return Response({"message": "CTT Faculty updated successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update CTT Faculty."}, status=500)
 
 
 @api_view(["PUT"])
@@ -1660,6 +1699,8 @@ def get_user_for_active_inactive(role, email):
             user = Leader.objects.get(email=email)
         if role == "curriculum":
             user = Curriculum.objects.get(email=email)
+        if role == "ctt_faculty":
+            user = CTTFaculty.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -2280,9 +2321,9 @@ def add_coach(request):
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     ctt_nctt = json.loads(request.data["ctt_nctt"])
-    competency = json.loads(request.data['competency'])
-    credentials_feels_like = request.data['credentials_feels_like']
-    coaching_type =request.data['coaching_type']
+    competency = json.loads(request.data["competency"])
+    credentials_feels_like = request.data["credentials_feels_like"]
+    coaching_type = request.data["coaching_type"]
     intro_summary = request.data.get("intro_summary", "")
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
@@ -2399,7 +2440,7 @@ def add_coach(request):
                 intro_summary=intro_summary,
                 competency=competency,
                 credentials_feels_like=credentials_feels_like,
-                coaching_type=coaching_type
+                coaching_type=coaching_type,
             )
 
             # Approve coach
@@ -2686,6 +2727,16 @@ def get_user_data(user):
         if not user.profile.curriculum.active_inactive:
             return None
         serializer = CurriculumDepthOneSerializer(user.profile.curriculum)
+    elif user_profile_role == "ctt_faculty":
+        if not user.profile.cttfaculty.active_inactive:
+            return None
+        serializer = CTTFacultyDepthOneSerializer(user.profile.cttfaculty)
+        return {
+            **serializer.data,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+            "business": "ctt",
+        }
     else:
         return None
     return {
@@ -2700,6 +2751,7 @@ def get_user_data(user):
 def generate_otp(request):
     try:
         user = User.objects.get(username=request.data["email"])
+      
         learner_roles = user.profile.roles.filter(name="learner")
         hr_roles = user.profile.roles.filter(name="hr")
         # for hr and coachee not allowing login when they are added in caas project where hr and coachee's platform is not provided/needed
@@ -2729,7 +2781,9 @@ def generate_otp(request):
             pass
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
+        
         created_otp = OTP.objects.create(user=user, otp=otp)
+        print("created_otp",created_otp)
         user_data = get_user_data(user)
         name = user_data.get("name") or user_data.get("first_name") or "User"
         # Send OTP on email to learner
@@ -2765,9 +2819,9 @@ def generate_otp(request):
         )
         return Response({"message": f"OTP has been sent to {user.username}!"})
 
-    except User.DoesNotExist:
+    except Exception as e:
         # Handle the case where the user with the given email does not exist
-        print("hello 2 ", str(e))
+        print(str(e))
 
         return Response(
             {"error": "User with the given email does not exist."}, status=400
@@ -3128,7 +3182,10 @@ def send_consent(request):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach", "sales", "finance")]
+    [
+        IsAuthenticated,
+        IsInRoles("learner", "pmo", "hr", "coach", "sales", "finance", "leader"),
+    ]
 )
 def get_project_details(request, project_type, project_id):
     try:
@@ -5324,7 +5381,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
         learner = LearnerSerializer(session_request.learner).data
         learner_name = session_request.learner.name
         learner_email = session_request.learner.email
-        learner_phone = session_request.learner.phone,
+        learner_phone = (session_request.learner.phone,)
         session_type = session_request.session_type
         session_number = session_request.session_number
         billable_session_number = session_request.billable_session_number
@@ -5349,7 +5406,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "organisation": organisation,
                 "coach_name": coach_name,
                 "coach_email": coach_email,
-                "coach_phone": coach_phone, 
+                "coach_phone": coach_phone,
                 "learner": learner,
                 "learner_name": learner_name,
                 "learner_email": learner_email,
@@ -5413,7 +5470,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
                 "learner": learner,
                 "learner_name": learner_name,
                 "learner_email": learner_email,
-                "learner_phone":learner_phone,
+                "learner_phone": learner_phone,
                 "session_type": session_type,
                 "session_number": session_number,
                 "billable_session_number": billable_session_number,
@@ -9061,7 +9118,7 @@ def get_coach_profile_template(request, project_id):
 class StandardizedFieldAPI(APIView):
     permission_classes = [
         IsAuthenticated,
-        IsInRoles("coach", "facilitator", "pmo", "hr", "learner"),
+        IsInRoles("coach", "facilitator", "pmo", "hr", "learner", 'leader'),
     ]
 
     def get(self, request):
@@ -9307,65 +9364,68 @@ class StandardizedFieldRequestAcceptReject(APIView):
 
     def put(self, request):
         status = request.data.get("status")
-        request_id = request.data.get("request_id")
+        request_ids = request.data.get("request_id")
+
+        if not isinstance(request_ids, list):
+            request_ids = [request_ids]
 
         try:
             with transaction.atomic():
-                request_instance = StandardizedFieldRequest.objects.get(id=request_id)
-                field_name = request_instance.standardized_field_name.field
-                value = request_instance.value
+                for request_id in request_ids:
+                    request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+                    field_name = request_instance.standardized_field_name.field
+                    value = request_instance.value
 
-                standardized_field, created = StandardizedField.objects.get_or_create(
-                    field=field_name
-                )
-                if status == "accepted":
-                    request_instance.status = status
-                    request_instance.save()
+                    standardized_field, created = StandardizedField.objects.get_or_create(
+                        field=field_name
+                    )
+                    if status == "accepted":
+                        request_instance.status = status
+                        request_instance.save()
 
-                    # if value not in standardized_field.values:
-                    #     standardized_field.values.append(value)
-                    #     standardized_field.save()
-                    # else:
-                    #     return Response({"error": "Value already present."}, status=404)
-                    return Response({"message": f"Request {status}"}, status=200)
-                else:
-                    request_instance.status = status
-                    request_instance.save()
+                        # if value not in standardized_field.values:
+                        #     standardized_field.values.append(value)
+                        #     standardized_field.save()
+                        # else:
+                        #     return Response({"error": "Value already present."}, status=404)
+                    else:
+                        request_instance.status = status
+                        request_instance.save()
 
-                    if value in standardized_field.values:
-                        standardized_field.values.remove(value)
-                        standardized_field.save()
+                        if value in standardized_field.values:
+                            standardized_field.values.remove(value)
+                            standardized_field.save()
 
-                    for model_name, fields in models_to_update.items():
-                        model_class = globals()[model_name]
-                        instances = model_class.objects.all()
+                        for model_name, fields in models_to_update.items():
+                            model_class = globals()[model_name]
+                            instances = model_class.objects.all()
 
-                        for instance in instances:
-                            for field in fields:
-                                field_value = getattr(instance, field, None)
-                                if field_value is not None:
-                                    if (
-                                        isinstance(field_value, list)
-                                        and value in field_value
-                                    ):
-                                        field_value.remove(value)
-                                        instance.save()
-                    if request_instance.coach:
-                        send_mail_templates(
-                            "coach_templates/reject_feild_item_request.html",
-                            [request_instance.coach.email],
-                            "Meeraq | Field Rejected",
-                            {
-                                "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
-                                "value": value,
-                                "feild": field_name.replace(" ", "_").title(),
-                            },
-                            [],
-                        )
-                    return Response({"message": f"Request {status}"}, status=200)
+                            for instance in instances:
+                                for field in fields:
+                                    field_value = getattr(instance, field, None)
+                                    if field_value is not None:
+                                        if (
+                                            isinstance(field_value, list)
+                                            and value in field_value
+                                        ):
+                                            field_value.remove(value)
+                                            instance.save()
+                        if request_instance.coach:
+                            send_mail_templates(
+                                "coach_templates/reject_feild_item_request.html",
+                                [request_instance.coach.email],
+                                "Meeraq | Field Rejected",
+                                {
+                                    "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                                    "value": value,
+                                    "feild": field_name.replace(" ", "_").title(),
+                                },
+                                [],
+                            )
+                return Response({"message": f"Requests {status}"}, status=200)
         except Exception as e:
             print(str(e))
-            return Response({"error": f"Failed to perform operation."}, status=500)
+            return Response({"error": "Failed to perform operation."}, status=500)
 
 
 class StandardFieldDeleteValue(APIView):
@@ -10144,6 +10204,21 @@ def change_user_role(request, user_id):
                 "business": "ctt",
             }
         )
+    elif user_profile_role == "ctt_faculty":
+        if not user.profile.cttfaculty.active_inactive:
+            return None
+        serializer = CTTFacultyDepthOneSerializer(user.profile.cttfaculty)
+
+        return Response(
+            {
+                **serializer.data,
+                "roles": roles,
+                "last_login": user.last_login,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+                "message": f"Role changed to Ctt Faculty",
+                "business": "ctt",
+            }
+        )
     elif user_profile_role == "leader":
         if not user.profile.leader.active_inactive:
             return None
@@ -10714,6 +10789,58 @@ def add_ctt_pmo(request):
             else:
                 return Response(
                     ctt_pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
+def get_ctt_faculties(request):
+    try:
+        ctt_faculties = CTTFaculty.objects.all()
+        serializer = CTTFacultySerializer(ctt_faculties, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
+def add_ctt_faculties(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            ctt_faculty_serializer = CTTFacultySerializer(data=data)
+            if ctt_faculty_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email", "").strip().lower()
+                phone = data.get("phone")
+
+                if not (name and phone and email):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                ctt_faculty_role, created = Role.objects.get_or_create(name="ctt_faculty")
+                profile.roles.add(ctt_faculty_role)
+                profile.save()
+                ctt_faculty_serializer.save(user=profile)
+                return Response(ctt_faculty_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(
+                    ctt_faculty_serializer.errors, status=status.HTTP_400_BAD_REQUEST
                 )
 
     except Exception as e:
@@ -13080,13 +13207,16 @@ def edit_curriculum(request, curriculum_id):
 import time
 import logging
 
+
 def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
     while True:
         try:
             run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
             if run.completed_at:
                 elapsed_time = run.completed_at - run.created_at
-                formatted_elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
+                formatted_elapsed_time = time.strftime(
+                    "%H:%M:%S", time.gmtime(elapsed_time)
+                )
                 logging.info(f"Run completed in {formatted_elapsed_time}")
 
                 # Get messages here once Run is completed!
@@ -13098,9 +13228,10 @@ def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
         except Exception as e:
             logging.error(f"An error occurred while retrieving the run: {e}")
             return None
-        
+
         logging.info("Waiting for run to complete...")
         time.sleep(sleep_interval)
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -13136,14 +13267,14 @@ def meeraq_chatbot(request):
     response["response"] = wait_for_run_completion(client, thread_id, run.id)
 
     if not response["response"]:
-        return Response({"error": "Failed to get response from the assistant."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"error": "Failed to get response from the assistant."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     # Save to ChatHistory
     chat_history = ChatHistory.objects.create(
-        prompt=prompt, 
-        response=response["response"],
-        user=user,
-        email=email
+        prompt=prompt, response=response["response"], user=user, email=email
     )
 
     # Log steps
@@ -13187,14 +13318,14 @@ def ctt_chatbot(request):
     response["response"] = wait_for_run_completion(client, thread_id, run.id)
 
     if not response["response"]:
-        return Response({"error": "Failed to get response from the assistant."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"error": "Failed to get response from the assistant."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     # Save to ChatHistory
     chat_history = ChatHistory.objects.create(
-        prompt=prompt, 
-        response=response["response"],
-        user=user,
-        email=email
+        prompt=prompt, response=response["response"], user=user, email=email
     )
 
     # Log steps

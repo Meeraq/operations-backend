@@ -437,4 +437,5 @@ urlpatterns = [
         views.edit_purchase_order,
         name="edit_purchase_order",
     ),
+    path("all-project-financials/", views.all_project_financials),
 ]
