@@ -650,4 +650,9 @@ urlpatterns = [
         views.get_contract_of_all_facilitator,
         name="get_contract_of_all_facilitator",
     ),
+        path(
+        "get-chatbot-history/",
+        views.get_chatbot_history,
+        name="get_chatbot_history",
+    ),
 ]

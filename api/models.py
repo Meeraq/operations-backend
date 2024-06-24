@@ -1036,11 +1036,19 @@ class UserFeedback(models.Model):
 
 
 class ChatHistory(models.Model):
+    USER_TYPE_CHOICES = [
+        ('ctt_pmo', 'CTT PMO'),
+        ('pmo', 'Meeraq PMO'),
+        ('curriculum', 'Curriculum'),
+        ('sales', 'Sales'),
+        ('finance','Finance')
+    ]
     prompt = models.TextField(blank=True, null=True, default=None)
     response = models.TextField(blank=True, null=True, default=None)
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
     is_old = models.BooleanField(blank=True,default=False)
     email = models.EmailField(blank=True, null=True)
+    user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

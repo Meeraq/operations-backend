@@ -12878,7 +12878,7 @@ def rewrite(request):
         )
 
     completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o",
         messages=[
             {
                 "role": "system",
@@ -12938,7 +12938,7 @@ def mira_assistant(request):
             ChatHistory.objects.order_by("-id")[:3].values_list("prompt", flat=True)
         )
         completion = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "\n".join(last_three_chats)},
                 {"role": "user", "content": prompt},
@@ -13113,7 +13113,9 @@ def meeraq_chatbot(request):
     thread_id = request.data.get("thread_id")
     prompt = request.data.get("prompt")
     email = request.data.get("email")
+    user_type = request.data.get("user_type")
     user = request.user if request.user.is_authenticated else None
+    print("data",request.data)
     client = OpenAI()
 
     # Check if thread exists, if not create a new one
@@ -13147,7 +13149,7 @@ def meeraq_chatbot(request):
 
     # Save to ChatHistory
     chat_history = ChatHistory.objects.create(
-        prompt=prompt, response=response["response"], user=user, email=email
+        prompt=prompt, response=response["response"], user=user, email=email, user_type=user_type
     )
 
     # Log steps
@@ -13160,10 +13162,12 @@ def meeraq_chatbot(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def ctt_chatbot(request):
+    print("data",request.data)
     assistant_id = env("CTT_ASSISTANT_ID")
     thread_id = request.data.get("thread_id")
     prompt = request.data.get("prompt")
     email = request.data.get("email")
+    user_type = request.data.get("user_type")
     user = request.user if request.user.is_authenticated else None
     client = OpenAI()
 
@@ -13198,7 +13202,7 @@ def ctt_chatbot(request):
 
     # Save to ChatHistory
     chat_history = ChatHistory.objects.create(
-        prompt=prompt, response=response["response"], user=user, email=email
+        prompt=prompt, response=response["response"], user=user, email=email, user_type=user_type
     )
 
     # Log steps
@@ -13329,3 +13333,39 @@ def accept_facilitator_contract(request, facilitator_contract_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to accept contract."}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","sales","ctt_pmo")])
+def get_chatbot_history(request):
+    try:
+        user_type = request.query_params.get("user_type")
+        if user_type:
+            if user_type in ["pmo", "sales"]:
+                chat_history = ChatHistory.objects.filter(user_type__in=["pmo", "sales"])
+            else:
+                chat_history = ChatHistory.objects.filter(user_type=user_type)
+        else:
+            chat_history = ChatHistory.objects.all()
+        unique_emails = set()
+        history_by_email = defaultdict(list)
+
+        for entry in chat_history:
+            if entry.email:
+                unique_emails.add(entry.email)
+                history_by_email[entry.email].append({
+                    "prompt": entry.prompt,
+                    "response": entry.response,
+                    "created_at": entry.created_at,
+                    "updated_at": entry.updated_at,
+                })
+
+        result = [
+            {"email": email, "conversations": history_by_email[email]}
+            for email in unique_emails
+        ]
+
+        return Response(result)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
