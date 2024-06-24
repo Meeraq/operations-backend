@@ -274,7 +274,7 @@ class ClientInvoiceGetSerializer(serializers.ModelSerializer):
 
     def get_cf_ctt_batch(self, obj):
         # Implement logic to compute the first custom field value based on obj
-        return obj.custom_field_hash.get("cf_ctt_batch", "")
+        return obj.custom_field_hash.get("cf_ctt_batch", "") if obj else None
 
 
 class ClientInvoiceLineItemSerializer(serializers.ModelSerializer):

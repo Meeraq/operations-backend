@@ -110,6 +110,7 @@ from .serializers import (
     EmployeeSerializer,
     GmSheetSalesOrderExistsSerializer,
     FacilitatorContractSerializerNoDepth,
+    MentoringSessionsSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -137,6 +138,7 @@ from .models import (
     Assets,
     Employee,
     FacilitatorContract,
+    MentoringSessions,
 )
 from api.serializers import (
     HrNoDepthSerializer,
@@ -149,7 +151,14 @@ from api.serializers import (
     FacilitatorSerializerWithNps,
     CoachContractSerializer,
 )
-
+from ctt.models import (
+    BatchFaculty,
+    Batches,
+    Sessions,
+    BatchUsers,
+    Faculties,
+    BatchMentorCoach,
+)
 from courses.models import (
     FeedbackLessonResponse,
     QuizLessonResponse,
@@ -239,6 +248,7 @@ from zohoapi.models import (
 from zohoapi.views import (
     fetch_purchase_orders,
     organization_id,
+    get_sales_order_queryset_for_project,
     fetch_sales_persons,
     filter_purchase_order_data,
 )
@@ -951,7 +961,7 @@ def update_handover(request):
                     "pmo_name": "PMO",
                     "sales_name": handover_instance.sales.name,
                     "sales_number": handover_instance.sales_order_ids,
-                    "organisation":handover_instance.organisation
+                    "organisation": handover_instance.organisation,
                 },
                 (
                     bcc_emails
@@ -9440,4 +9450,188 @@ def get_hrs_of_batch(request, batch_id):
 def get_hrs_of_organisation(request, organisation_id):
     hrs = HR.objects.filter(organisation__id=organisation_id)
     serializer = HrNoDepthSerializer(hrs, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def faculty_wise_batch_details(request, email):
+    batch_ids = (
+        BatchFaculty.objects.using("ctt")
+        .filter(faculty__email=email)
+        .values_list("batch_id", flat=True)
+    )
+    batches = (
+        Batches.objects.using("ctt").filter(id__in=batch_ids).order_by("-created_at")
+    )
+    data = []
+    index = 1
+    for batch in batches:
+        total_participants = BatchUsers.objects.using("ctt").filter(batch=batch).count()
+        no_of_sessions = Sessions.objects.using("ctt").filter(batch=batch).count()
+
+        faculty_ids = (
+            BatchFaculty.objects.using("ctt")
+            .filter(batch=batch)
+            .values_list("faculty_id", flat=True)
+        )
+        faculties = Faculties.objects.using("ctt").filter(id__in=faculty_ids)
+        faculty_names = [f"{f.first_name} {f.last_name}" for f in faculties]
+
+        mentor_coach_ids = (
+            BatchMentorCoach.objects.using("ctt")
+            .filter(batch=batch)
+            .values_list("faculty_id", flat=True)
+        )
+        mentor_coaches = Faculties.objects.using("ctt").filter(id__in=mentor_coach_ids)
+        mentor_coach_names = [
+            f"{mc.first_name} {mc.last_name}" for mc in mentor_coaches
+        ]
+
+        batch_data = {
+            "id": batch.id,
+            "index": index,
+            "batch_name": batch.name,
+            "program_name": batch.program.name,
+            "start_date": batch.start_date,
+            "total_participants": total_participants,
+            "no_of_sessions": no_of_sessions,
+            "created_at": batch.created_at,
+        }
+        index += 1
+        data.append(batch_data)
+
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_mentoring_session(request, participant_id, batch_id, user_id):
+    try:
+        data = request.data
+        name = data.get("name")
+        participant_name = data.get("participant_name")
+        date_time = data.get("date_time")
+        status = data.get("status")
+        description = data.get("description")
+        duration = data.get("duration")
+        faculty_id = user_id
+
+        if not all([name, participant_name, date_time, status, duration]):
+            return Response(
+                {"error": "All fields except duration are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        mentoring_session = MentoringSessions.objects.create(
+            name=name,
+            participant_name=participant_name,
+            date_time=date_time,
+            status=status,
+            description=description,
+            duration=duration,
+            participant_id=participant_id,
+            batch_id=batch_id,
+            faculty_id=faculty_id,
+        )
+
+        mentoring_session.save()
+
+        return Response(
+            {"message": "Mentoring Session Created Successfully!"}, status=200
+        )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_mentoring_session(request, session_id, user_id):
+    try:
+        data = request.data
+        print("data", data)
+        name = data.get("name")
+        participant_name = data.get("participant_name")
+        date_time = data.get("date_time")
+        status_value = data.get("status")
+        description = data.get("description")
+        duration = data.get("duration")
+        batch = data.get("batch")
+
+        if not all([name, participant_name, date_time, status_value, duration, batch]):
+            return Response(
+                {"error": "All fields except description are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            mentoring_session = MentoringSessions.objects.get(
+                id=session_id, faculty_id=user_id
+            )
+        except MentoringSessions.DoesNotExist:
+            return Response(
+                {"error": "Mentoring session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        mentoring_session.name = name
+        mentoring_session.participant_name = participant_name
+        mentoring_session.date_time = date_time
+        mentoring_session.status = status_value
+        mentoring_session.description = description
+        mentoring_session.duration = duration
+
+        mentoring_session.save()
+
+        serializer = MentoringSessionsSerializer(mentoring_session)
+        return Response(
+            {
+                "message": "Mentoring Session Details Updated Successfully!",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_mentoring_session(request, batch_id):
+    try:
+        mentoring_sessions = MentoringSessions.objects.filter(batch_id=batch_id)
+        serializer = MentoringSessionsSerializer(mentoring_sessions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_mentoring_session_of_that_faculty(request, user_id):
+    try:
+        ctt_pmo = request.query_params.get("ctt_pmo")
+        if ctt_pmo:
+            mentoring_sessions = MentoringSessions.objects.all()
+        else:
+            mentoring_sessions = MentoringSessions.objects.filter(faculty_id=user_id)
+        serializer = MentoringSessionsSerializer(mentoring_sessions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_gm_sheet_of_project(request, project_type, project_id):
+    sales_orders = get_sales_order_queryset_for_project(project_id, project_type)
+    gm_sheets = [
+        sales_order.gm_sheet for sales_order in sales_orders if sales_order.gm_sheet
+    ]
+    serializer = GmSheetDetailedSerializer(gm_sheets, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)

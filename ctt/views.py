@@ -678,6 +678,7 @@ def get_all_faculties(request):
 def get_all_finance(request):
     try:
         salesperson_id = request.query_params.get("salesperson_id", None)
+        salesperson_id_sales = request.query_params.get("salesperson_id_sales", None)
 
         batch_users = (
             BatchUsers.objects.using("ctt")
@@ -688,7 +689,7 @@ def get_all_finance(request):
 
         # Convert batch_users emails to a list to avoid subquery across different databases
         user_emails = list(batch_users.values_list("user__email", flat=True))
-        if salesperson_id:
+        if salesperson_id or salesperson_id_sales:
             salesorders = SalesOrder.objects.filter(
                 zoho_customer__email__in=user_emails, salesperson_id=salesperson_id
             ).select_related("zoho_customer")
@@ -702,6 +703,11 @@ def get_all_finance(request):
         # user_assignments = UserAssignments.objects.using("ctt").all()
         assignments = Assignments.objects.using("ctt").all()
         for batch_user in batch_users:
+            if salesperson_id_sales:
+                salesorders.filter(zoho_customer__email=batch_user.user.email)
+                if salesorders.count() == 0:
+                    continue
+
             user_email = batch_user.user.email
             batch_name = batch_user.batch.name
             user_salesorders = [
@@ -724,6 +730,11 @@ def get_all_finance(request):
                 if invoice.get("status") == "paid"
             )
             sales_persons = {so.salesperson_name for so in user_salesorders}
+            background = (
+                user_salesorders[0].background
+                if len(user_salesorders) > 0 and user_salesorders[0]
+                else ""
+            )
             currency_code = (
                 user_salesorders[0].currency_code if user_salesorders else None
             )
@@ -770,6 +781,7 @@ def get_all_finance(request):
                 "no_of_sales_orders": len(user_salesorders),
                 "organisation": batch_user.user.current_organisation_name,
                 "certificate_status": certificate_status,
+                "background": background,
             }
             index += 1
             # assuming that the user is the salespersons user only if sales order exists
@@ -862,6 +874,7 @@ def get_participants_of_that_batch(request, batch_id):
             user_data = {
                 "index": index,
                 "batch_user_id": batch_user.id,
+                "user_id":batch_user.user.id,
                 "name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
                 "email": batch_user.user.email,
                 "phone_number": batch_user.user.phone,
@@ -877,9 +890,10 @@ def get_participants_of_that_batch(request, batch_id):
             index += 1
             data.append(user_data)
         return Response(data)
-    except BatchUsers.DoesNotExist:
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"message": "Batch users not found for the given batch ID"}, status=404
+            {"message": "Batch users not found for the given batch ID"}, status=500
         )
 
 
@@ -1104,12 +1118,22 @@ def get_the_profitability_of_a_batch(request, batch_id):
 def get_upcoming_sessions(request):
     try:
         batch_id = request.query_params.get("batch_id")
+        faculty_email = request.query_params.get("faculty_email")
         now = datetime.now()
         upcoming_sessions = (
             Sessions.objects.using("ctt")
-            .filter(start_time__gte=now, date__gte=now.date())
-            .order_by("date", "start_time")
+            .filter(
+                Q(date__gt=now.date())
+                | (Q(date=now.date()) & Q(start_time__gte=now.time())),
+                deleted_at__isnull=True,
+            )
+            .order_by("-date", "-start_time")
+            .distinct()
         )
+        if faculty_email:
+            upcoming_sessions = upcoming_sessions.filter(
+                batch__batchfaculty__faculty__email=faculty_email
+            )
 
         if batch_id:
             upcoming_sessions = upcoming_sessions.filter(
@@ -1156,12 +1180,22 @@ def get_upcoming_sessions(request):
 def get_past_sessions(request):
     try:
         batch_id = request.query_params.get("batch_id")
+        faculty_email = request.query_params.get("faculty_email")
         now = datetime.now()
         past_sessions = (
             Sessions.objects.using("ctt")
-            .filter(end_time__lte=now, date__lte=now.date())
+            .filter(
+                Q(date__lt=now.date())
+                | (Q(date=now.date()) & Q(start_time__lt=now.time())),
+                deleted_at__isnull=True,
+            )
             .order_by("-date", "-start_time")
+            .distinct()
         )
+        if faculty_email:
+            past_sessions = past_sessions.filter(
+                batch__batchfaculty__faculty__email=faculty_email
+            )
 
         if batch_id:
             past_sessions = past_sessions.filter(batch__id=int(batch_id)).order_by(
@@ -1211,8 +1245,13 @@ def get_all_sessions(request, batch_id):
         now = datetime.now()
         sessions = (
             Sessions.objects.using("ctt")
-            .filter(start_time__gte=now, date__gte=now.date(), batch__id=int(batch_id))
-            .order_by("date", "start_time")
+            .filter(
+                Q(date__gt=now.date())
+                | (Q(date=now.date()) & Q(start_time__gte=now.time())),
+                deleted_at__isnull=True,
+            )
+            .order_by("-date", "-start_time")
+            .distinct()
         )
         serializer = SessionsSerializerDepthOne(sessions, many=True)
         return Response(serializer.data)
@@ -1297,7 +1336,9 @@ def send_calendar_invites(request):
         meeting_id = request.data.get("meeting_id", None)
         meeting_passcode = request.data.get("meeting_passcode", None)
         if meeting_link:
-            all_sessions = Sessions.objects.using("ctt").filter(batch__id=batch_id)
+            all_sessions = Sessions.objects.using("ctt").filter(
+                batch__id=batch_id, deleted_at__isnull=True
+            )
             all_sessions_array = [
                 {
                     "name": f"Session {session.session_no}",
@@ -1387,6 +1428,7 @@ def send_calendar_invites(request):
                             print(str(e))
 
                 return Response({"message": "Invites sent successfully!"}, status=200)
+            return Response({"error": "Upcoming Sessions are not present."}, status=500)
         return Response({"error": "Failed to send invites"}, status=500)
     except Exception as e:
         print(str(e))
