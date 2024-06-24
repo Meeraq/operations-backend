@@ -242,6 +242,11 @@ urlpatterns = [
         name="get_all_sales_orders_of_project",
     ),
     path(
+        "get-all-client-invoices-for-project/<int:project_id>/<str:project_type>/",
+        views.get_all_client_invoices_of_project,
+        name="get-all-client-invoices-for-project",
+    ),
+    path(
         "get-ctt-sales-orders/",
         views.get_ctt_sales_orders,
         name="get_ctt_sales_orders/",

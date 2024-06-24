@@ -3074,6 +3074,22 @@ def get_all_sales_orders_of_project(request, project_id, project_type):
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_client_invoices_of_project(request, project_id, project_type):
+    try:
+        all_sales_orders = get_so_for_project(project_id, project_type)
+        so_ids = set()
+        for sales_order in all_sales_orders:
+            so_ids.add(sales_order["salesorder_id"])
+            
+        client_invoices = ClientInvoice.objects.filter(sales_order__in=list(so_ids))
+        serializer = ClientInvoiceSerializer(client_invoices, many=True)  
+        
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -5234,6 +5250,7 @@ def calculate_financials(project_id, project_type):
     ).distinct()
     expected_revenue, expected_cost = Decimal("0.0"), Decimal("0.0")
     expected_currency = None
+    expected_profitability=0
 
     for gm_sheet in gm_sheets:
         expected_currency = gm_sheet.currency
@@ -5241,6 +5258,7 @@ def calculate_financials(project_id, project_type):
         if offering:
             expected_revenue += calculate_total_revenue(offering.revenue_structure)
             expected_cost += calculate_total_cost(offering.cost_structure)
+            expected_profitability = offering.gross_margin
 
     return {
         "sales_order_cost": total,
@@ -5258,6 +5276,7 @@ def calculate_financials(project_id, project_type):
         "expected_currency": expected_currency,
         "expected_cost": expected_cost,
         "expected_revenue": expected_revenue,
+        "expected_profitability":expected_profitability
     }
 
 
@@ -5279,12 +5298,12 @@ def all_project_financials(request):
         projects = (
             Project.objects.all()
             .select_related("organisation")
-            .only("id", "organisation__name", "name", "project_type")
+            .only("id", "organisation__name", "name", "project_type","created_at")
         )
         schedular_projects = (
             SchedularProject.objects.all()
             .select_related("organisation")
-            .only("id", "organisation__name", "name", "project_type")
+            .only("id", "organisation__name", "name", "project_type","created_at")
         )
 
         combined_projects = [
@@ -5294,6 +5313,7 @@ def all_project_financials(request):
                 "organisation": project.organisation.name,
                 "name": project.name,
                 "project_type_extra": project.project_type,
+                "created_at": project.created_at if project.created_at else None,
             }
             for project in projects
         ] + [
@@ -5303,6 +5323,7 @@ def all_project_financials(request):
                 "organisation": schedular_project.organisation.name,
                 "name": schedular_project.name,
                 "project_type_extra": schedular_project.project_type,
+                "created_at": schedular_project.created_at if schedular_project.created_at else None,
             }
             for schedular_project in schedular_projects
         ]
@@ -5314,7 +5335,7 @@ def all_project_financials(request):
             organisation = project["organisation"]
             project_name = project["name"]
             project_type_extra = project["project_type_extra"]
-
+            created_at = project["created_at"]
             financials = calculate_financials(project_id, project_type)
             financials.update(
                 {
@@ -5322,10 +5343,10 @@ def all_project_financials(request):
                     "project_name": project_name,
                     "project_type": project_type_extra,
                     "id": project_id,
+                    "created_at": created_at,
                 }
             )
             res.append(financials)
-
         return Response(res)
     except Exception as e:
         print(str(e))
