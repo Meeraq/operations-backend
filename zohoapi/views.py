@@ -3083,7 +3083,7 @@ def get_all_client_invoices_of_project(request, project_id, project_type):
         for sales_order in all_sales_orders:
             so_ids.add(sales_order["salesorder_id"])
             
-        client_invoices = ClientInvoice.objects.filter(sales_order__in=list(so_ids))
+        client_invoices = ClientInvoice.objects.filter(sales_order__salesorder_id__in=list(so_ids))
         serializer = ClientInvoiceSerializer(client_invoices, many=True)  
         
         return Response(serializer.data, status=status.HTTP_200_OK)
