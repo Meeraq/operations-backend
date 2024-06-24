@@ -13242,7 +13242,6 @@ def meeraq_chatbot(request):
     email = request.data.get("email")
     user_type = request.data.get("user_type")
     user = request.user if request.user.is_authenticated else None
-    print("data",request.data)
     client = OpenAI()
 
     # Check if thread exists, if not create a new one
@@ -13289,7 +13288,6 @@ def meeraq_chatbot(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def ctt_chatbot(request):
-    print("data",request.data)
     assistant_id = env("CTT_ASSISTANT_ID")
     thread_id = request.data.get("thread_id")
     prompt = request.data.get("prompt")
