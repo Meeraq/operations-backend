@@ -2280,7 +2280,7 @@ def send_whatsapp_reminder_assessment_on_click(data):
                 )
                 unique_id = participant_unique_id.unique_id
                 assessment_link = (
-                    f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
                 )
                 send_whatsapp_message("learner", participant, assessment, unique_id)
         except ObjectDoesNotExist:
@@ -2307,7 +2307,7 @@ def send_email_reminder_assessment_on_click(data):
                 )
                 unique_id = participant_unique_id.unique_id
                 assessment_link = (
-                    f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
                 )
                 send_mail_templates(
                     "assessment/assessment_reminder_mail_to_participant.html",
@@ -2808,7 +2808,7 @@ def send_whatsapp_reminder_assessment(assessment_id):
                 )
                 unique_id = participant_unique_id.unique_id
                 assessment_link = (
-                    f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
                 )
                 print("Participant Unique ID:", unique_id)
                 send_whatsapp_message("learner", participant, assessment, unique_id)
