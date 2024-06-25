@@ -3074,6 +3074,7 @@ def get_all_sales_orders_of_project(request, project_id, project_type):
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_client_invoices_of_project(request, project_id, project_type):
@@ -3082,14 +3083,17 @@ def get_all_client_invoices_of_project(request, project_id, project_type):
         so_ids = set()
         for sales_order in all_sales_orders:
             so_ids.add(sales_order["salesorder_id"])
-            
-        client_invoices = ClientInvoice.objects.filter(sales_order__salesorder_id__in=list(so_ids))
-        serializer = ClientInvoiceSerializer(client_invoices, many=True)  
-        
+
+        client_invoices = ClientInvoice.objects.filter(
+            sales_order__salesorder_id__in=list(so_ids)
+        )
+        serializer = ClientInvoiceSerializer(client_invoices, many=True)
+
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -3134,7 +3138,7 @@ def get_ctt_client_invoices_for_participant(request, participant_email, batch_na
             zoho_customer__email=participant_email,
             sales_order__custom_field_hash__cf_ctt_batch=batch_name,
         )
-      
+
         all_client_invoices = ClientInvoiceGetSerializer(
             client_invoices, many=True
         ).data
@@ -5224,17 +5228,17 @@ def calculate_financials(project_id, project_type):
     purchase_all_bills_paid = []
 
     for purchase_order in purchase_orders:
-        purchase_order_cost += (
-            Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
-        )
+        purchase_order_cost += Decimal(str(purchase_order.total)) * Decimal(
+            purchase_order.exchange_rate
+        )  # Change here
         for bill in purchase_order.bills:
-            purchase_billed_amount += (
-                Decimal(str(bill["total"])) * purchase_order.exchange_rate
-            )
+            purchase_billed_amount += Decimal(str(bill["total"])) * Decimal(
+                purchase_order.exchange_rate
+            )  # Change here
             if bill["status"] == "paid":
-                purchase_paid_amount += (
-                    Decimal(str(bill["total"])) * purchase_order.exchange_rate
-                )
+                purchase_paid_amount += Decimal(str(bill["total"])) * Decimal(
+                    purchase_order.exchange_rate
+                )  # Change here
                 purchase_all_bills_paid.append(True)
             else:
                 purchase_all_bills_paid.append(False)
@@ -5250,7 +5254,7 @@ def calculate_financials(project_id, project_type):
     ).distinct()
     expected_revenue, expected_cost = Decimal("0.0"), Decimal("0.0")
     expected_currency = None
-    expected_profitability=0
+    expected_profitability = 0
 
     for gm_sheet in gm_sheets:
         expected_currency = gm_sheet.currency
@@ -5276,7 +5280,7 @@ def calculate_financials(project_id, project_type):
         "expected_currency": expected_currency,
         "expected_cost": expected_cost,
         "expected_revenue": expected_revenue,
-        "expected_profitability":expected_profitability
+        "expected_profitability": expected_profitability,
     }
 
 
@@ -5298,12 +5302,12 @@ def all_project_financials(request):
         projects = (
             Project.objects.all()
             .select_related("organisation")
-            .only("id", "organisation__name", "name", "project_type","created_at")
+            .only("id", "organisation__name", "name", "project_type", "created_at")
         )
         schedular_projects = (
             SchedularProject.objects.all()
             .select_related("organisation")
-            .only("id", "organisation__name", "name", "project_type","created_at")
+            .only("id", "organisation__name", "name", "project_type", "created_at")
         )
 
         combined_projects = [
@@ -5323,7 +5327,11 @@ def all_project_financials(request):
                 "organisation": schedular_project.organisation.name,
                 "name": schedular_project.name,
                 "project_type_extra": schedular_project.project_type,
-                "created_at": schedular_project.created_at if schedular_project.created_at else None,
+                "created_at": (
+                    schedular_project.created_at
+                    if schedular_project.created_at
+                    else None
+                ),
             }
             for schedular_project in schedular_projects
         ]
