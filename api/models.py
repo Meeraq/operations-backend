@@ -53,6 +53,8 @@ def get_user_name(user):
             return user.profile.pmo.name
         elif role == "coach":
             return user.profile.coach.first_name + " " + user.profile.coach.last_name
+        elif role == "employee":
+            return user.profile.employee.first_name + " " + user.profile.employee.last_name
         elif role == "vendor":
             return user.profile.vendor.name
         elif role == "hr":
@@ -162,6 +164,7 @@ class Profile(models.Model):
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
         ("finance", "finance"),
+        ("employee", "employee"),
         ("sales", "sales"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)

@@ -79,6 +79,8 @@ from .serializers import (
     EmailTemplateSerializer,
     SentEmailDepthOneSerializer,
     BatchSerializer,
+    GroupSerializer,
+    ManagementTaskSerializer,
     LiveSessionSerializer,
     CoachingSessionSerializer,
     CoachSchedularAvailibiltySerializer,
@@ -114,6 +116,7 @@ from .serializers import (
 )
 from .models import (
     SchedularBatch,
+    ManagementTask,
     LiveSession,
     CoachingSession,
     SchedularProject,
@@ -137,6 +140,7 @@ from .models import (
     Benchmark,
     Assets,
     Employee,
+    Group,
     FacilitatorContract,
     MentoringSessions,
 )
@@ -8418,12 +8422,45 @@ def get_employees(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
 def create_employee(request):
-    serializer = EmployeeSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        with transaction.atomic():
+            data = request.data
+            employee_serializer = EmployeeSerializer(data=data)
+            if employee_serializer.is_valid():
+                first_name = data.get("first_name")
+                last_name = data.get("last_name")
+                email = data.get("email", "").strip().lower()
+                phone_number = data.get("phone_number")
+
+                if not (first_name and last_name and phone_number and email):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                employee_role, created = Role.objects.get_or_create(name="employee")
+                profile.roles.add(employee_role)
+                profile.save()
+                employee_serializer.save(user=profile)
+                return Response(employee_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(
+                    employee_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -8589,6 +8626,87 @@ def send_mail_to_coaches(request):
         print(str(e))
         return Response({"error": "Failed to send mail!"}, status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_group(request):
+        serializer = GroupSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def view_groups(request):
+        groups = Group.objects.all()
+        serializer = GroupSerializer(groups, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_management_task(request):
+        serializer = ManagementTaskSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def edit_management_task(request, pk):
+    try:
+        task = ManagementTask.objects.get(pk=pk)
+    except ManagementTask.DoesNotExist:
+        return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+    serializer = ManagementTaskSerializer(task, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_tasks(request):
+    tasks = ManagementTask.objects.all()
+    serializer = ManagementTaskSerializer(tasks, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_management_task(request, pk):
+    try:
+        task = ManagementTask.objects.get(pk=pk)
+    except ManagementTask.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    task.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def edit_group(request, pk):
+    try:
+        group = Group.objects.get(pk=pk)
+    except Group.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = GroupSerializer(group, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['DELETE'])
+def delete_group(request, pk):
+    try:
+        group = Group.objects.get(pk=pk)
+    except Group.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    group.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

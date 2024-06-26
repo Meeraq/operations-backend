@@ -35,6 +35,15 @@ urlpatterns = [
     path("employees/", views.get_employees, name="get_employees"),
     path("update-employee/", views.update_employee, name="update_employee"),
     path("delete-employee/", views.delete_employee, name="delete_employee"),
+    path('create-group/', views.create_group, name='create-group'),
+    path('group/', views.view_groups, name='view-groups'),
+    path('edit-group/<int:pk>/', views.edit_group),
+    path('delete-group/<int:pk>/', views.delete_group),
+    path('tasks/', views.get_all_tasks, name='get_all_tasks'),
+    path('create-management-task/', views.create_management_task, name='create_management_task'),
+    path('edit-management-task/<int:pk>/', views.edit_management_task, name='edit_management_task'),
+    path('delete-management-task/<int:pk>/', views.delete_management_task, name='delete_management_task'),
+
     path(
         "current-or-next-year/",
         views.get_current_or_next_year,

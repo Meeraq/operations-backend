@@ -401,9 +401,37 @@ class Employee(models.Model):
     last_name = models.CharField(max_length=30)
     phone_number = models.CharField(max_length=15)
     email = models.EmailField(unique=True)
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True, null=True) 
+    active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+class Group(models.Model):
+    name = models.CharField(max_length=100)
+    employees = models.ManyToManyField(Employee, related_name='groups')
+    
+    def __str__(self):
+        return self.name
+    
+class ManagementTask(models.Model):
+    STATUS_CHOICES = [
+        ('idle', 'Idle'),
+        ('ongoing', 'Ongoing'),
+        ('completed', 'Completed'),
+        ('not_done', 'Not Done'),
+    ]
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True, max_length=255)
+    group = models.ManyToManyField(Group,null=True,blank=True)
+    start_date = models.DateTimeField(null=True, blank=True,default=None)
+    deadline = models.DateTimeField(null=True, blank=True,default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='idle')
+
+    def __str__(self):
+        return self.name
 
 
 class Assets(models.Model):
