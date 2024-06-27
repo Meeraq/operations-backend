@@ -1469,8 +1469,16 @@ def delete_participant_from_assessments(assessment, participant_id, assessment_i
                 participant__id=participant_id,
                 assessment=assessment,
             )
+
             if assessment_participant_response:
                 assessment_participant_response.delete()
+            
+            assessment_temp_participant_response = ParticipantTempResponse.objects.filter(
+                participant__id=participant_id,
+                assessment=assessment,
+            )
+            assessment_temp_participant_response.delete()
+
 
             return True
         return False
@@ -5268,7 +5276,7 @@ def add_user_as_a_participant_of_assessment(request):
         if assessment.status == "draft" or assessment.status == "completed":
             return Response(
                 {
-                    "error": "Assessment is not accessible. Contact pmocoaching@meeraq.com."
+                    "error": "Assessment is not accessible. Contact pmotraining@meeraq.com."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )

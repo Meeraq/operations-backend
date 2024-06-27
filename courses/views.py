@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from collections import defaultdict
+import json
 
 # Create your views here.
 import boto3
@@ -4675,7 +4676,6 @@ def create_ctt_feedback(request):
                 session_number=session_number,
                 program=program,
                 feedback=feedback,
-
             )
 
             # Add questions to the CttFeedback instance
@@ -4972,3 +4972,64 @@ def delete_template(request):
 #     except Exception as e:
 #         print(str(e))
 #         return Response({"error": "Failed to retrieve feedback"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def release_ctt_certificates_multiple_participants(request):
+    try:
+        batch_user_ids = request.data.get("batch_user_ids")
+        certificate_type = request.data.get("certificate_type")
+
+        certificate_id_mapping = json.loads(env("CTT_CERTIFICATE_MAPPING"))
+
+        certificate_id = certificate_id_mapping.get(certificate_type)
+        if not certificate_id:
+            return Response({"error": "Invalid certificate type"}, status=400)
+
+        certificate = Certificate.objects.get(id=certificate_id)
+
+        for batch_user_id in batch_user_ids:
+            batch_user = BatchUsers.objects.using("ctt").get(id=batch_user_id)
+            learner_name = f"{batch_user.user.first_name} {batch_user.user.last_name}"
+            content = {"learner_name": learner_name}
+
+            email_message = certificate.content
+            for key, value in content.items():
+                email_message = email_message.replace(f"{{{{{key}}}}}", str(value))
+
+            pdf = pdfkit.from_string(
+                email_message,
+                False,
+                configuration=pdfkit_config,
+                options={"orientation": "Landscape"},
+            )
+            # Send email with PDF attachment
+            email = EmailMessage(
+                f"{env('EMAIL_SUBJECT_INITIAL',default='')} {batch_user.batch.program.name} Certificate",
+                (""),
+                settings.DEFAULT_FROM_EMAIL,
+                (
+                    batch_user.user.email
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else "naveen@meeraq.com"
+                ),
+                bcc=[],
+            )
+
+            email.content_subtype = "html"
+
+            result = BytesIO(pdf)
+            email.attach(
+                f"Certificate_{learner_name}.pdf",
+                result.getvalue(),
+                "application/pdf",
+            )
+            email.send()
+            batch_user.certificate = "Released"
+            batch_user.save()
+
+        return Response({"message": "Certificates released successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to release certificates"}, status=500)
