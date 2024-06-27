@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from collections import defaultdict
+import json
 
 # Create your views here.
 import boto3
@@ -4307,26 +4308,25 @@ def get_feedback(request, feedback_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_end_meeting_feedback_response_data(request):
-
     try:
-        coach_session_feedback_responses = (
-            CoachingSessionsFeedbackResponse.objects.all()
-        )
+        coach_session_feedback_responses = CoachingSessionsFeedbackResponse.objects.all()
         data = []
+
         for coach_session_feedback_response in coach_session_feedback_responses:
             temp = {}
-            cass_session = coach_session_feedback_response.caas_session
-            if cass_session:
-                if cass_session.coach:
-                    coach_name = (
-                        cass_session.coach.first_name
-                        + " "
-                        + cass_session.coach.last_name
-                    )
 
-                else:
-                    coach_name = None
+            if coach_session_feedback_response.caas_session:
+                cass_session = coach_session_feedback_response.caas_session
+                if cass_session:
+                    if cass_session.coach:
+                        coach_name = (
+                            cass_session.coach.first_name
+                            + " "
+                            + cass_session.coach.last_name
+                        )
 
+                    else:
+                        coach_name = None
                 temp = {
                     "feedback_responses_id": coach_session_feedback_response.id,
                     "coach_name": coach_name,
@@ -4337,14 +4337,13 @@ def get_end_meeting_feedback_response_data(request):
                     "session_number": cass_session.session_number,
                     "type": "CAAS",
                 }
-            else:
+            elif coach_session_feedback_response.schedular_session:
                 seeq_session = coach_session_feedback_response.schedular_session
+                coach_name = seeq_session.availibility.coach.first_name + " " +seeq_session.availibility.coach.last_name  
 
                 temp = {
                     "feedback_responses_id": coach_session_feedback_response.id,
-                    "coach_name": seeq_session.availibility.coach.first_name
-                    + " "
-                    + seeq_session.availibility.coach.last_name,
+                    "coach_name": coach_name,
                     "project_name": seeq_session.coaching_session.batch.project.name,
                     "org_name": seeq_session.coaching_session.batch.project.organisation.name,
                     "coachee_name": seeq_session.learner.name,
@@ -4353,16 +4352,29 @@ def get_end_meeting_feedback_response_data(request):
                     "type": "SEEQ",
                 }
 
+            answer_data = []
+            for answer in coach_session_feedback_response.answers.all():
+                answer_data.append({
+                    "question": answer.question.text,
+                    "rating": answer.rating,
+                    "selected_answer": answer.selected_options,
+                    "type": answer.question.type,
+                })
+
+            temp["answer_data"] = answer_data
+
+            # Find session rating if exists
             for answer in coach_session_feedback_response.answers.all():
                 if answer.question.type == "rating_1_to_5":
-                    temp["sesson_rating"] = answer.rating
+                    temp["session_rating"] = answer.rating
                     break
 
             data.append(temp)
 
         return Response(data)
+    
     except Exception as e:
-        print(str(e))
+        print(str(e))  # Log the actual exception for debugging purposes
         return Response(
             {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -4675,7 +4687,6 @@ def create_ctt_feedback(request):
                 session_number=session_number,
                 program=program,
                 feedback=feedback,
-
             )
 
             # Add questions to the CttFeedback instance
@@ -4972,3 +4983,64 @@ def delete_template(request):
 #     except Exception as e:
 #         print(str(e))
 #         return Response({"error": "Failed to retrieve feedback"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def release_ctt_certificates_multiple_participants(request):
+    try:
+        batch_user_ids = request.data.get("batch_user_ids")
+        certificate_type = request.data.get("certificate_type")
+
+        certificate_id_mapping = json.loads(env("CTT_CERTIFICATE_MAPPING"))
+
+        certificate_id = certificate_id_mapping.get(certificate_type)
+        if not certificate_id:
+            return Response({"error": "Invalid certificate type"}, status=400)
+
+        certificate = Certificate.objects.get(id=certificate_id)
+
+        for batch_user_id in batch_user_ids:
+            batch_user = BatchUsers.objects.using("ctt").get(id=batch_user_id)
+            learner_name = f"{batch_user.user.first_name} {batch_user.user.last_name}"
+            content = {"learner_name": learner_name}
+
+            email_message = certificate.content
+            for key, value in content.items():
+                email_message = email_message.replace(f"{{{{{key}}}}}", str(value))
+
+            pdf = pdfkit.from_string(
+                email_message,
+                False,
+                configuration=pdfkit_config,
+                options={"orientation": "Landscape"},
+            )
+            # Send email with PDF attachment
+            email = EmailMessage(
+                f"{env('EMAIL_SUBJECT_INITIAL',default='')} {batch_user.batch.program.name} Certificate",
+                (""),
+                settings.DEFAULT_FROM_EMAIL,
+                (
+                    batch_user.user.email
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else "naveen@meeraq.com"
+                ),
+                bcc=[],
+            )
+
+            email.content_subtype = "html"
+
+            result = BytesIO(pdf)
+            email.attach(
+                f"Certificate_{learner_name}.pdf",
+                result.getvalue(),
+                "application/pdf",
+            )
+            email.send()
+            batch_user.certificate = "Released"
+            batch_user.save()
+
+        return Response({"message": "Certificates released successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to release certificates"}, status=500)

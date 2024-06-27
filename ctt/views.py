@@ -18,6 +18,9 @@ from .serializers import (
     FacultiesSerializer,
     SessionsSerializerDepthOne,
 )
+from django.http import HttpResponse
+import pandas as pd
+from io import BytesIO
 import base64
 from .models import (
     Batches,
@@ -842,6 +845,13 @@ def get_participants_of_that_batch(request, batch_id):
             batch_name = batch_user.batch.name
             batch_start_date = batch_user.batch.start_date
             program_name = batch_user.batch.program.name
+            salesorders = (
+                SalesOrder.objects.filter(zoho_customer__email=batch_user.user.email)
+                .select_related("zoho_customer")
+                .first()
+            )
+            background = salesorders.background if salesorders else ""
+
             assignment_completion = (
                 UserAssignments.objects.using("ctt")
                 .filter(user=batch_user.user, assignment__batch=batch_user.batch)
@@ -874,7 +884,7 @@ def get_participants_of_that_batch(request, batch_id):
             user_data = {
                 "index": index,
                 "batch_user_id": batch_user.id,
-                "user_id":batch_user.user.id,
+                "user_id": batch_user.user.id,
                 "name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
                 "email": batch_user.user.email,
                 "phone_number": batch_user.user.phone,
@@ -885,6 +895,7 @@ def get_participants_of_that_batch(request, batch_id):
                 "certificate_status": certificate_status,
                 "organisation": organization_name,
                 "payment_status": payment_status,
+                "background": background,
             }
 
             index += 1
@@ -1127,7 +1138,7 @@ def get_upcoming_sessions(request):
                 | (Q(date=now.date()) & Q(start_time__gte=now.time())),
                 deleted_at__isnull=True,
             )
-            .order_by("-date", "-start_time")
+            .order_by("date", "start_time")
             .distinct()
         )
         if faculty_email:
@@ -1250,7 +1261,7 @@ def get_all_sessions(request, batch_id):
                 | (Q(date=now.date()) & Q(start_time__gte=now.time())),
                 deleted_at__isnull=True,
             )
-            .order_by("-date", "-start_time")
+            .order_by("date", "start_time")
             .distinct()
         )
         serializer = SessionsSerializerDepthOne(sessions, many=True)
@@ -1433,3 +1444,55 @@ def send_calendar_invites(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to send invites"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def download_training_attendance_data(request, batch_id):
+    try:
+        batch = Batches.objects.using("ctt").get(id=batch_id)
+        sessions = Sessions.objects.using("ctt").filter(
+            batch=batch,
+            deleted_at__isnull=True,
+        )
+        batch_users = BatchUsers.objects.using("ctt").filter(
+            batch=batch,
+            deleted_at__isnull=True,
+        )
+        data = []
+
+        for batch_user in batch_users:
+            temp = {
+                "Participant Name": batch_user.user.first_name
+                + " "
+                + batch_user.user.last_name
+            }
+            for session in sessions:
+                ctt_attendance = CttSessionAttendance.objects.filter(
+                    session=session.id
+                ).first()
+                is_present = False
+                if ctt_attendance:
+                    if batch_user.id in ctt_attendance.attendance:
+                        is_present = True
+
+                temp[f"Session {session.session_no}"] = (
+                    "Attended" if is_present else "Not Attended"
+                )
+
+            data.append(temp)
+
+        df = pd.DataFrame(data)
+        excel_writer = BytesIO()
+        df.to_excel(excel_writer, index=False)
+        excel_writer.seek(0)
+        response = HttpResponse(
+            excel_writer.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="Report.xlsx"'
+        return response
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)

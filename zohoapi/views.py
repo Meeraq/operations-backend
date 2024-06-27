@@ -4735,12 +4735,24 @@ def get_latest_data(request):
 @permission_classes([IsAuthenticated])
 def get_ctt_revenue_data(request):
     try:
-        # Filter sales orders containing "CTT" in their sales order number
-        sales_orders = SalesOrder.objects.filter(
+        start_date = request.query_params.get("start_date", "")
+        end_date = request.query_params.get("end_date", "")
+
+        if start_date:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        filters = (
             Q(salesorder_number__icontains="CTT")
             | Q(salesorder_number__icontains="ctt")
             | Q(salesorder_number__icontains="Ctt")
-        )
+        )   
+        if start_date and end_date:
+            filters &= Q(created_date__range=[start_date, end_date])
+
+        sales_orders = SalesOrder.objects.filter(filters)
+
         data = {}
         total = 0
         monthly_sales_order = {}
@@ -4805,6 +4817,12 @@ def get_sales_of_each_program(request):
     try:
         start_date = request.query_params.get("start_date", "")
         end_date = request.query_params.get("end_date", "")
+
+        if start_date:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
         all_batches = Batches.objects.using("ctt").all().order_by("-created_at")
         l1_batches = []
         l2_batches = []
@@ -4820,12 +4838,13 @@ def get_sales_of_each_program(request):
                 l3_batches.append(batch.name)
             elif batch.program.certification_level.name == "ACTC":
                 actc_batches.append(batch.name)
-        # date_query = ""
-        # if start_date and end_date:
-        #     date_query = f"&date_start={start_date}&date_end={end_date}"
-        # query_params = f"&salesorder_number_contains=CTT{date_query}"
-        # sales_orders = fetch_sales_orders(organization_id, query_params)
-        sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
+
+        filters = Q(salesorder_number__startswith="CTT")
+        if start_date and end_date:
+            filters &= Q(created_date__range=[start_date, end_date])
+
+        sales_orders = SalesOrder.objects.filter(filters)
+
         program_totals = {
             "L1": 0,
             "L2": 0,

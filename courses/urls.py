@@ -437,7 +437,7 @@ urlpatterns = [
         "get-end-meeting-feedback-response-data/",
         views.get_end_meeting_feedback_response_data,
     ),
-        path(
+    path(
         "export-feedback-to-excel/",
         views.export_feedback_data_to_excel,
     ),
@@ -502,8 +502,12 @@ urlpatterns = [
         "delete-template/",
         views.delete_template,
     ),
-     path(
+    path(
         "edit-template/<int:template_id>/",
         views.edit_template,
+    ),
+    path(
+        "release-ctt-certificates-multiple-participants/",
+        views.release_ctt_certificates_multiple_participants,
     ),
 ]
