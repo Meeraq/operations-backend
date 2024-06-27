@@ -6629,7 +6629,7 @@ def edit_competency(request, competency_id):
     competency_name = request.data["name"]
     if (
         not Competency.objects.filter(name=competency_name, goal__id=competency.goal.id)
-        .exclude(id=competency.goal.id)
+        .exclude(id=competency.id)
         .exists()
     ):
         if serializer.is_valid():
