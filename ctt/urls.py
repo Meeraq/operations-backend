@@ -99,4 +99,9 @@ urlpatterns = [
         views.send_calendar_invites,
         name="send_calendar_invites",
     ),
+     path(
+        "download-training-attendance-data/<int:batch_id>/",
+        views.download_training_attendance_data,
+        name="download_training_attendance_data",
+    ),
 ]
