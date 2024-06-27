@@ -13052,7 +13052,7 @@ def get_user_feedback_repsonses(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def mira_assistant(request):
     try:
         client = OpenAI()

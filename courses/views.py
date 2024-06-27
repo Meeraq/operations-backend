@@ -4308,26 +4308,25 @@ def get_feedback(request, feedback_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_end_meeting_feedback_response_data(request):
-
     try:
-        coach_session_feedback_responses = (
-            CoachingSessionsFeedbackResponse.objects.all()
-        )
+        coach_session_feedback_responses = CoachingSessionsFeedbackResponse.objects.all()
         data = []
+
         for coach_session_feedback_response in coach_session_feedback_responses:
             temp = {}
-            cass_session = coach_session_feedback_response.caas_session
-            if cass_session:
-                if cass_session.coach:
-                    coach_name = (
-                        cass_session.coach.first_name
-                        + " "
-                        + cass_session.coach.last_name
-                    )
 
-                else:
-                    coach_name = None
+            if coach_session_feedback_response.caas_session:
+                cass_session = coach_session_feedback_response.caas_session
+                if cass_session:
+                    if cass_session.coach:
+                        coach_name = (
+                            cass_session.coach.first_name
+                            + " "
+                            + cass_session.coach.last_name
+                        )
 
+                    else:
+                        coach_name = None
                 temp = {
                     "feedback_responses_id": coach_session_feedback_response.id,
                     "coach_name": coach_name,
@@ -4338,14 +4337,13 @@ def get_end_meeting_feedback_response_data(request):
                     "session_number": cass_session.session_number,
                     "type": "CAAS",
                 }
-            else:
+            elif coach_session_feedback_response.schedular_session:
                 seeq_session = coach_session_feedback_response.schedular_session
+                coach_name = seeq_session.availibility.coach.first_name + " " +seeq_session.availibility.coach.last_name  
 
                 temp = {
                     "feedback_responses_id": coach_session_feedback_response.id,
-                    "coach_name": seeq_session.availibility.coach.first_name
-                    + " "
-                    + seeq_session.availibility.coach.last_name,
+                    "coach_name": coach_name,
                     "project_name": seeq_session.coaching_session.batch.project.name,
                     "org_name": seeq_session.coaching_session.batch.project.organisation.name,
                     "coachee_name": seeq_session.learner.name,
@@ -4354,16 +4352,29 @@ def get_end_meeting_feedback_response_data(request):
                     "type": "SEEQ",
                 }
 
+            answer_data = []
+            for answer in coach_session_feedback_response.answers.all():
+                answer_data.append({
+                    "question": answer.question.text,
+                    "rating": answer.rating,
+                    "selected_answer": answer.selected_options,
+                    "type": answer.question.type,
+                })
+
+            temp["answer_data"] = answer_data
+
+            # Find session rating if exists
             for answer in coach_session_feedback_response.answers.all():
                 if answer.question.type == "rating_1_to_5":
-                    temp["sesson_rating"] = answer.rating
+                    temp["session_rating"] = answer.rating
                     break
 
             data.append(temp)
 
         return Response(data)
+    
     except Exception as e:
-        print(str(e))
+        print(str(e))  # Log the actual exception for debugging purposes
         return Response(
             {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
