@@ -1138,7 +1138,7 @@ def get_upcoming_sessions(request):
                 | (Q(date=now.date()) & Q(start_time__gte=now.time())),
                 deleted_at__isnull=True,
             )
-            .order_by("-date", "-start_time")
+            .order_by("date", "start_time")
             .distinct()
         )
         if faculty_email:
@@ -1261,7 +1261,7 @@ def get_all_sessions(request, batch_id):
                 | (Q(date=now.date()) & Q(start_time__gte=now.time())),
                 deleted_at__isnull=True,
             )
-            .order_by("-date", "-start_time")
+            .order_by("date", "start_time")
             .distinct()
         )
         serializer = SessionsSerializerDepthOne(sessions, many=True)
