@@ -510,4 +510,30 @@ urlpatterns = [
         "release-ctt-certificates-multiple-participants/",
         views.release_ctt_certificates_multiple_participants,
     ),
+    path(
+        "release-ctt-pe-multiple-participants/",
+        views.release_ctt_pe_multiple_participants,
+    ),
+    path(
+        "store-pe-participant-data/",
+        views.store_pe_participant_data,
+    ),
+    path(
+        "ctt-performance-email-otp-send/",
+        views.ctt_performance_email_otp_send,
+    ),
+    path(
+        "ctt-performance-email-otp-validate/",
+        views.ctt_performance_email_otp_validate,
+    ),
+    path(
+        "get-all-pe/",
+        views.get_all_pe,
+    ),
+    path(
+        "edit-pe-result/",
+        views.edit_pe_result,
+    ),
+
+    
 ]

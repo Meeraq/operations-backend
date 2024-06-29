@@ -928,7 +928,7 @@ class SalesOrder(models.Model):
     linkedin_profile = models.CharField(max_length=225, blank=True, null=True)
     background = models.CharField(max_length=225, blank=True, null=True)
     designation = models.CharField(max_length=225, blank=True, null=True)
-    
+    performance_evaluation = models.CharField(max_length=225, blank=True, null=True)
 
     class Meta:
         ordering = ["-created_time"]

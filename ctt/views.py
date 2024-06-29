@@ -845,12 +845,8 @@ def get_participants_of_that_batch(request, batch_id):
             batch_name = batch_user.batch.name
             batch_start_date = batch_user.batch.start_date
             program_name = batch_user.batch.program.name
-            salesorders = (
-                SalesOrder.objects.filter(zoho_customer__email=batch_user.user.email)
-                .select_related("zoho_customer")
-                .first()
-            )
-            background = salesorders.background if salesorders else ""
+            
+            
 
             assignment_completion = (
                 UserAssignments.objects.using("ctt")
@@ -869,6 +865,10 @@ def get_participants_of_that_batch(request, batch_id):
                 custom_field_hash__cf_ctt_batch=batch_user.batch.name,
             )
             payment_status = None
+
+            background = salesorders.first().background if salesorders.first() else ""
+
+            performance_evaluation = salesorders.first().performance_evaluation if salesorders.first() else ""
 
             for sales_order in salesorders:
                 if sales_order.invoiced_status != "invoiced":
@@ -896,6 +896,7 @@ def get_participants_of_that_batch(request, batch_id):
                 "organisation": organization_name,
                 "payment_status": payment_status,
                 "background": background,
+                "performance_evaluation":performance_evaluation,
             }
 
             index += 1
@@ -1146,10 +1147,14 @@ def get_upcoming_sessions(request):
                 batch__batchfaculty__faculty__email=faculty_email
             )
 
+        participant_count = 0
         if batch_id:
             upcoming_sessions = upcoming_sessions.filter(
                 batch__id=int(batch_id)
             ).order_by("date", "start_time")
+            participant_count = (
+                BatchUsers.objects.using("ctt").filter(batch=int(batch_id)).count()
+            )
 
         all_sessions = []
         for session in upcoming_sessions:
@@ -1177,6 +1182,7 @@ def get_upcoming_sessions(request):
                     "description": session.description,
                     "type": session.type,
                     "session_attendance": (user_names if user_names else []),
+                    "total_participants": participant_count,
                 }
             )
 
@@ -1208,9 +1214,14 @@ def get_past_sessions(request):
                 batch__batchfaculty__faculty__email=faculty_email
             )
 
+        participant_count = 0
+
         if batch_id:
             past_sessions = past_sessions.filter(batch__id=int(batch_id)).order_by(
                 "-date", "-start_time"
+            )
+            participant_count = (
+                BatchUsers.objects.using("ctt").filter(batch=int(batch_id)).count()
             )
 
         all_sessions = []
@@ -1240,6 +1251,7 @@ def get_past_sessions(request):
                     "description": session.description,
                     "type": session.type,
                     "session_attendance": (user_names if user_names else []),
+                    "total_participants": participant_count,
                 }
             )
 
@@ -1492,6 +1504,47 @@ def download_training_attendance_data(request, batch_id):
         )
         response["Content-Disposition"] = 'attachment; filename="Report.xlsx"'
         return response
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def training_attendance_data(request, batch_id):
+    try:
+        batch = Batches.objects.using("ctt").get(id=batch_id)
+        sessions = Sessions.objects.using("ctt").filter(
+            batch=batch,
+            deleted_at__isnull=True,
+        )
+        batch_users = BatchUsers.objects.using("ctt").filter(
+            batch=batch,
+            deleted_at__isnull=True,
+        )
+        data = []
+
+        for batch_user in batch_users:
+            temp = {
+                "participant_name": batch_user.user.first_name
+                + " "
+                + batch_user.user.last_name
+            }
+            for session in sessions:
+                ctt_attendance = CttSessionAttendance.objects.filter(
+                    session=session.id
+                ).first()
+                is_present = False
+                if ctt_attendance:
+                    if batch_user.id in ctt_attendance.attendance:
+                        is_present = True
+
+                temp[f"Session {session.session_no}"] = is_present
+
+            data.append(temp)
+
+        return Response(data)
 
     except Exception as e:
         print(str(e))

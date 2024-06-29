@@ -3283,6 +3283,10 @@ def get_sales_order_data(request, salesorder_id):
         if response.status_code == 200:
             sales_order = response.json().get("salesorder")
             gm_sheet = None
+            background = None
+            designation = None
+            linkedin_profile = None
+            referred_by = None
             existing_sales_order = SalesOrder.objects.filter(
                 salesorder_id=sales_order["salesorder_id"]
             ).first()
@@ -3292,8 +3296,20 @@ def get_sales_order_data(request, salesorder_id):
                     if existing_sales_order.gm_sheet
                     else None
                 )
+                background = existing_sales_order.background
+                designation = existing_sales_order.designation
+                linkedin_profile = existing_sales_order.linkedin_profile
+                referred_by = existing_sales_order.referred_by
             return Response(
-                {**sales_order, "gm_sheet": gm_sheet}, status=status.HTTP_200_OK
+                {
+                    **sales_order,
+                    "gm_sheet": gm_sheet,
+                    "background": background,
+                    "linkedin_profile": linkedin_profile,
+                    "referred_by": referred_by,
+                    "designation": designation,
+                },
+                status=status.HTTP_200_OK,
             )
         else:
             return Response(
@@ -4747,7 +4763,7 @@ def get_ctt_revenue_data(request):
             Q(salesorder_number__icontains="CTT")
             | Q(salesorder_number__icontains="ctt")
             | Q(salesorder_number__icontains="Ctt")
-        )   
+        )
         if start_date and end_date:
             filters &= Q(created_date__range=[start_date, end_date])
 
