@@ -3471,6 +3471,7 @@ def create_sales_order(request):
                 sales_order.linkedin_profile = JSONString.get("linkedInProfile", "")
                 sales_order.background = JSONString.get("background", "")
                 sales_order.designation = JSONString.get("designation", "")
+                sales_order.companies_worked_in = JSONString.get("companies_worked_in", "")
                 sales_order.save()
 
             gm_sheet_id = request.data.get("gm_sheet", "")

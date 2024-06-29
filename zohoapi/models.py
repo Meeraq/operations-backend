@@ -928,6 +928,7 @@ class SalesOrder(models.Model):
     linkedin_profile = models.CharField(max_length=225, blank=True, null=True)
     background = models.CharField(max_length=225, blank=True, null=True)
     designation = models.CharField(max_length=225, blank=True, null=True)
+    companies_worked_in = models.CharField(max_length=225, blank=True, null=True)
     
 
     class Meta:
