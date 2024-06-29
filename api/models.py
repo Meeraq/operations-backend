@@ -813,6 +813,7 @@ class StandardizedField(models.Model):
         ("credentials_feels_like","Credential Feels like"),
         ("competency","Competency"),
         ("coaching_type","Coaching Type"),
+        ("function","Function")
     )
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
     values = models.JSONField(default=list, blank=True)

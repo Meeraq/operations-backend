@@ -1171,6 +1171,7 @@ FIELD_NAME_VALUES = {
     "coaching_type": "Coaching Type",
     "credentials_feels_like": "Credential Feels Like",
     "competency": "Competency",
+    "function":"Function"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [

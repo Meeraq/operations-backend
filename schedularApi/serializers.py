@@ -28,8 +28,9 @@ from .models import (
 from api.models import Coach
 from api.models import Sales
 from zohoapi.models import SalesOrder
-
-
+from ctt.models import(
+    Batches
+)
 class SchedularProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularProject
@@ -253,18 +254,24 @@ class TaskSerializer(serializers.ModelSerializer):
         model = Task
         fields = "__all__"
 
-
 class ManagementTaskSerializer(serializers.ModelSerializer):
     group_names = serializers.SerializerMethodField()
+    employee_names = serializers.SerializerMethodField()
 
     class Meta:
         model = ManagementTask
         fields = "__all__"
-        
+
     def get_group_names(self, obj):
-        return [group.name for group in obj.group.all() if obj.group.exists()]
+        if obj.group:
+            return obj.group.name
+        return None
 
-
+    def get_employee_names(self, obj):
+        if obj.employee.exists():
+            return ", ".join([f"{employee.first_name} {employee.last_name}" for employee in obj.employee.all()])
+        return None
+        
 class BenchmarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = Benchmark
@@ -352,12 +359,12 @@ class MentoringSessionsSerializer(serializers.ModelSerializer):
         model = MentoringSessions
         fields = "__all__"
 
-
 class GroupSerializer(serializers.ModelSerializer):
-    employees = serializers.PrimaryKeyRelatedField(
-        queryset=Employee.objects.all(), many=True
-    )
+    employees = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all(), many=True)
     employee_names = serializers.SerializerMethodField()
+    seeq_project_name = serializers.SerializerMethodField()
+    caas_project_name = serializers.SerializerMethodField()
+    owner_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
@@ -366,3 +373,19 @@ class GroupSerializer(serializers.ModelSerializer):
     def get_employee_names(self, instance):
         employees = instance.employees.all()
         return [f"{employee.first_name} {employee.last_name}" for employee in employees]
+
+    def get_seeq_project_name(self, instance):
+        if instance.seeq_project:
+            return instance.seeq_project.name
+        return None
+
+    def get_caas_project_name(self, instance):
+        if instance.caas_project:
+            return instance.caas_project.name
+        return None
+
+    def get_owner_name(self, instance):
+        if instance.owner:
+            return f"{instance.owner.first_name} {instance.owner.last_name}"
+        return None
+

@@ -8628,19 +8628,170 @@ def send_mail_to_coaches(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def create_group(request):
+def create_group(request, user_id):
+    try:
+        # Get the request data
+        data = request.data
+        user = User.objects.get(id =user_id)
+        
+        employees = data.get('employees', [])
+        print(user.profile)
+        if not user.profile.employee:
+            return Response({"error": "User is not an employee."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(user.profile)
+        # Append user_id to employees list if not already present
+        if user.profile.employee.id not in employees:
+            employees.append(user.profile.employee.id)
+
+        # Update the request data with modified 'employees' list
+        data['employees'] = employees
+        data['owner'] = user.profile.employee.id
+
+        # Serialize the data
+        serializer = GroupSerializer(data=data)
+
+        # Validate and save the data
+        if serializer.is_valid():
+            serializer.save()
+            
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        # Return validation errors
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['POST'])
+def group_create_leader(request):
         serializer = GroupSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def view_groups(request):
+#     project_id = request.query_params.get('project_id', None)
+#     project_type = request.query_params.get('project_type', None)
+    
+#     if project_id and project_type:
+#         if project_type == 'skill_training':
+#             groups = Group.objects.filter(seeq_project_id=project_id)
+#         elif project_type == 'coaching':
+#             groups = Group.objects.filter(caas_project_id=project_id)
+#         else:
+#             groups = Group.objects.none()
+#     else:
+#         groups = Group.objects.all()
+
+#     serializer = GroupSerializer(groups, many=True)
+#     return Response(serializer.data, status=status.HTTP_200_OK)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def view_groups(request):
+def group_employee_detail(request, group_id):
+    try:
+        group = Group.objects.get(pk=group_id)
+    except Group.DoesNotExist:
+        return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Retrieve employee IDs associated with the group
+    employee_ids = group.employees.values_list('id', flat=True)
+
+    # Query employees based on the retrieved IDs
+    employees = Employee.objects.filter(id__in=employee_ids)
+
+    # Serialize the employee details
+    serializer = EmployeeSerializer(employees, many=True)
+
+    return Response(serializer.data)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def view_groups_for_employee(request, user_id):
+    try:
+        user_id = int(user_id)
+    except ValueError:
+        return Response({"error": "Invalid user_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Get all groups where the employee with user_id exists
+        groups = Group.objects.filter(employees__id=user_id)
+        all_groups = []
+        for group in groups:
+            # Handle null batch values gracefully
+            if group.batch is not None:
+                try:
+                    batch = Batches.objects.using("ctt").get(id=group.batch)
+                    batch_name = batch.name
+                except Batches.DoesNotExist:
+                    batch_name = "Batch not found"
+            else:
+                batch_name = "No batch assigned"
+            
+            # Serialize the group
+            group_data = GroupSerializer(group).data
+            # Add batch_name to the serialized group data
+            data = {
+                **group_data,
+                "batch_name": batch_name
+            }
+            all_groups.append(data)
+        
+        return Response(all_groups, status=status.HTTP_200_OK)
+    
+    except Group.DoesNotExist:
+        return Response({"error": "No groups found for this user"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_detail(request, group_id):
+    try:
+        group = Group.objects.get(id=group_id)
+    except Group.DoesNotExist:
+        return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = GroupSerializer(group)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_groups(request):
+    try:
         groups = Group.objects.all()
-        serializer = GroupSerializer(groups, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        all_groups = []
+        
+        for group in groups:
+            # Handle null batch values gracefully
+            if group.batch is not None:
+                try:
+                    batch = Batches.objects.using("ctt").get(id=group.batch)
+                    batch_name = batch.name
+                except Batches.DoesNotExist:
+                    batch_name = "Batch not found"
+            else:
+                batch_name = "No batch assigned"
+            
+            # Serialize the group
+            group_data = GroupSerializer(group).data
+            # Add batch_name to the serialized group data
+            data = {
+                **group_data,
+                "batch_name": batch_name
+            }
+            all_groups.append(data)
+        
+        return Response(all_groups, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -8667,11 +8818,49 @@ def edit_management_task(request, pk):
 
 
 @api_view(['GET'])
+def get_all_group_tasks(request,group_id):
+    tasks = ManagementTask.objects.filter(group=group_id)
+    serializer = ManagementTaskSerializer(tasks, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_all_tasks(request):
     tasks = ManagementTask.objects.all()
     serializer = ManagementTaskSerializer(tasks, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_tasks_for_employee(request, employee_id):
+    tasks = ManagementTask.objects.filter(employee=employee_id)
+    serializer = ManagementTaskSerializer(tasks, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_tasks_for_employee_groupwise(request, employee_id, group_id=None):
+    tasks = ManagementTask.objects.filter(employee=employee_id)
+    
+    if group_id is not None:
+        tasks = tasks.filter(group=group_id)
+    
+    serializer = ManagementTaskSerializer(tasks, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_task_of_employee(request, employee_id):
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response({'error': 'Employee not found'}, status=404)
+
+    tasks = ManagementTask.objects.filter(employee=employee).distinct()
+    serializer = ManagementTaskSerializer(tasks, many=True)
+    
+    return Response(serializer.data)
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
@@ -8688,11 +8877,11 @@ def delete_management_task(request, pk):
 @permission_classes([IsAuthenticated])
 def edit_group(request, pk):
     try:
-        group = Group.objects.get(pk=pk)
+        group = Group.objects.get(id=pk)
     except Group.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serializer = GroupSerializer(group, data=request.data)
+    serializer = GroupSerializer(group, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
