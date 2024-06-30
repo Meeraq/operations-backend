@@ -23,6 +23,7 @@ from .models import (
     Assets,
     FacilitatorContract,
     MentoringSessions,
+    Employee
 )
 
 # Register your models here.
@@ -50,3 +51,4 @@ admin.site.register(Benchmark)
 admin.site.register(Assets)
 admin.site.register(FacilitatorContract)
 admin.site.register(MentoringSessions)
+admin.site.register(Employee)

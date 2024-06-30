@@ -87,6 +87,7 @@ from .serializers import (
     UserFeedbackSerializer,
     ChatHistorySerializer,
     CurriculumDepthOneSerializer,
+    EmployeeDepthOneSerializer,
     CurriculumSerializer,
 )
 from zohoapi.serializers import (
@@ -213,6 +214,7 @@ from schedularApi.models import (
     ProjectContract,
     Benchmark,
     FacilitatorContract,
+    Employee,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
@@ -1169,6 +1171,7 @@ FIELD_NAME_VALUES = {
     "coaching_type": "Coaching Type",
     "credentials_feels_like": "Credential Feels Like",
     "competency": "Competency",
+    "function":"Function"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -1704,6 +1707,8 @@ def get_user_for_active_inactive(role, email):
             user = Curriculum.objects.get(email=email)
         if role == "ctt_faculty":
             user = CTTFaculty.objects.get(email=email)
+        if role == "employee":
+            user = Employee.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -2619,7 +2624,6 @@ def session_view(request):
     else:
         return Response({"error": "Invalid user type"}, status=400)
 
-
 def get_user_data(user):
     if not user.profile:
         return None
@@ -2649,8 +2653,8 @@ def get_user_data(user):
                 "user": {**serializer.data["user"], "type": user_profile_role},
             }
         else:
-
             return None
+
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -2665,15 +2669,17 @@ def get_user_data(user):
         if not user.profile.pmo.active_inactive:
             return None
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+
     elif user_profile_role == "superadmin":
         if not user.profile.superadmin.active_inactive:
             return None
-
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+
     elif user_profile_role == "finance":
         if not user.profile.finance.active_inactive:
             return None
         serializer = FinanceDepthOneSerializer(user.profile.finance)
+
     elif user_profile_role == "learner":
         if not user.profile.learner.active_inactive:
             return None
@@ -2691,6 +2697,7 @@ def get_user_data(user):
             "roles": roles,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
+
     elif user_profile_role == "hr":
         if not user.profile.hr.active_inactive:
             return None
@@ -2707,29 +2714,33 @@ def get_user_data(user):
             "is_seeq_allowed": is_seeq_allowed,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
+
     elif user_profile_role == "sales":
         if not user.profile.sales.active_inactive:
             return None
         serializer = SalesDepthOneSerializer(user.profile.sales)
+
     elif user_profile_role == "ctt_pmo":
         if not user.profile.cttpmo.active_inactive:
             return None
         serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
-
         return {
             **serializer.data,
             "roles": roles,
             "user": {**serializer.data["user"], "type": user_profile_role},
             "business": "ctt",
         }
+
     elif user_profile_role == "leader":
         if not user.profile.leader.active_inactive:
             return None
         serializer = LeaderDepthOneSerializer(user.profile.leader)
+
     elif user_profile_role == "curriculum":
         if not user.profile.curriculum.active_inactive:
             return None
         serializer = CurriculumDepthOneSerializer(user.profile.curriculum)
+
     elif user_profile_role == "ctt_faculty":
         if not user.profile.cttfaculty.active_inactive:
             return None
@@ -2740,8 +2751,19 @@ def get_user_data(user):
             "user": {**serializer.data["user"], "type": user_profile_role},
             "business": "ctt",
         }
+
+    elif user_profile_role == "employee":
+        if not user.profile.employee.active_inactive:
+            return None
+        serializer = EmployeeDepthOneSerializer(user.profile.employee)
+        return {
+            **serializer.data,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
     else:
         return None
+
     return {
         **serializer.data,
         "roles": roles,
@@ -10071,31 +10093,28 @@ class SendContractReminder(APIView):
 def change_user_role(request, user_id):
     user_role = request.data.get("user_role", "")
     user = User.objects.get(id=user_id)
+    
     if not user.profile:
-        print("hello")
         return Response({"error": "No user profile."}, status=400)
     elif user.profile.roles.count() == 0:
-        print("second")
         return Response({"error": "No user role."}, status=400)
+    
     try:
         user_profile_role = user.profile.roles.all().get(name=user_role).name
     except Exception as e:
-        print(e)
         return Response({"error": "User role not found."}, status=400)
+
     roles = []
     for role in user.profile.roles.all():
         user_data = get_user_for_active_inactive(role.name, user.profile.user.username)
         if user_data and user_data.active_inactive:
             roles.append(role.name)
+
     if user_profile_role == "coach":
         if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
-            is_caas_allowed = Project.objects.filter(
-                coaches_status__coach=user.profile.coach
-            ).exists()
-            is_seeq_allowed = SchedularBatch.objects.filter(
-                coaches=user.profile.coach
-            ).exists()
+            is_caas_allowed = Project.objects.filter(coaches_status__coach=user.profile.coach).exists()
+            is_seeq_allowed = SchedularBatch.objects.filter(coaches=user.profile.coach).exists()
             return Response(
                 {
                     **serializer.data,
@@ -10109,22 +10128,27 @@ def change_user_role(request, user_id):
             )
         else:
             return None
+
     elif user_profile_role == "pmo":
         if not user.profile.pmo.active_inactive:
             return None
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+
     elif user_profile_role == "superadmin":
         if not user.profile.superadmin.active_inactive:
             return None
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+
     elif user_profile_role == "finance":
         if not user.profile.finance.active_inactive:
             return None
         serializer = FinanceDepthOneSerializer(user.profile.finance)
+
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
+
     elif user_profile_role == "vendor":
         if not user.profile.vendor.active_inactive:
             return None
@@ -10132,10 +10156,7 @@ def change_user_role(request, user_id):
         organization = get_organization_data()
         zoho_vendor = get_vendor(serializer.data["vendor_id"])
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(
-            user=user, timestamp=login_timestamp, platform="caas"
-        )
-
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp, platform="caas")
         return Response(
             {
                 **serializer.data,
@@ -10151,17 +10172,13 @@ def change_user_role(request, user_id):
                 "message": f"Role changed to billing",
             }
         )
+
     elif user_profile_role == "learner":
         if not user.profile.learner.active_inactive:
             return None
         serializer = LearnerDepthOneSerializer(user.profile.learner)
-        is_caas_allowed = Engagement.objects.filter(
-            learner=user.profile.learner
-        ).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(
-            learners=user.profile.learner
-        ).exists()
-
+        is_caas_allowed = Engagement.objects.filter(learner=user.profile.learner).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(learners=user.profile.learner).exists()
         return Response(
             {
                 **serializer.data,
@@ -10173,6 +10190,7 @@ def change_user_role(request, user_id):
                 "message": "Role changed to Learner",
             }
         )
+
     elif user_profile_role == "hr":
         if not user.profile.hr.active_inactive:
             return None
@@ -10188,15 +10206,16 @@ def change_user_role(request, user_id):
                 "user": {**serializer.data["user"], "type": user_profile_role},
             }
         )
+
     elif user_profile_role == "sales":
         if not user.profile.sales.active_inactive:
             return None
         serializer = SalesDepthOneSerializer(user.profile.sales)
+
     elif user_profile_role == "ctt_pmo":
         if not user.profile.cttpmo.active_inactive:
             return None
         serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
-
         return Response(
             {
                 **serializer.data,
@@ -10207,11 +10226,11 @@ def change_user_role(request, user_id):
                 "business": "ctt",
             }
         )
+
     elif user_profile_role == "ctt_faculty":
         if not user.profile.cttfaculty.active_inactive:
             return None
         serializer = CTTFacultyDepthOneSerializer(user.profile.cttfaculty)
-
         return Response(
             {
                 **serializer.data,
@@ -10222,16 +10241,33 @@ def change_user_role(request, user_id):
                 "business": "ctt",
             }
         )
+
     elif user_profile_role == "leader":
         if not user.profile.leader.active_inactive:
             return None
         serializer = LeaderDepthOneSerializer(user.profile.leader)
+
     elif user_profile_role == "curriculum":
         if not user.profile.curriculum.active_inactive:
             return None
         serializer = CurriculumDepthOneSerializer(user.profile.curriculum)
+
+    elif user_profile_role == "employee":
+        if not user.profile.employee.active_inactive:
+            return None
+        serializer = EmployeeDepthOneSerializer(user.profile.employee)
+        return Response(
+            {
+                **serializer.data,
+                "roles": roles,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+                "last_login": user.last_login,
+                "message": f"Role changed to Employee",
+            }
+        )
     else:
         return Response({"error": "Unknown user role."}, status=400)
+
     return Response(
         {
             **serializer.data,
