@@ -22,11 +22,15 @@ from .models import (
     Employee,
     FacilitatorContract,
     MentoringSessions,
+    Group,
+    ManagementTask,
 )
 from api.models import Coach
 from api.models import Sales
 from zohoapi.models import SalesOrder
-
+from ctt.models import(
+    Batches
+)
 class SchedularProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularProject
@@ -57,13 +61,14 @@ class FacilitatorContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = FacilitatorContract
         fields = "__all__"
-        depth= 1
+        depth = 1
+
 
 class FacilitatorContractSerializerNoDepth(serializers.ModelSerializer):
     class Meta:
         model = FacilitatorContract
         fields = "__all__"
-        
+
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
@@ -237,21 +242,42 @@ class HandoverDetailsSerializer(serializers.ModelSerializer):
         model = HandoverDetails
         fields = "__all__"
 
+
 class AssetsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assets
-        fields = '__all__'
+        fields = "__all__"
+
 
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = "__all__"
 
+class ManagementTaskSerializer(serializers.ModelSerializer):
+    group_names = serializers.SerializerMethodField()
+    employee_names = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ManagementTask
+        fields = "__all__"
+
+    def get_group_names(self, obj):
+        if obj.group:
+            return obj.group.name
+        return None
+
+    def get_employee_names(self, obj):
+        if obj.employee.exists():
+            return ", ".join([f"{employee.first_name} {employee.last_name}" for employee in obj.employee.all()])
+        return None
+        
 class BenchmarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = Benchmark
         fields = "__all__"
-        
+
+
 class AssetsDetailedSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.SerializerMethodField()
 
@@ -264,21 +290,26 @@ class AssetsDetailedSerializer(serializers.ModelSerializer):
         model = Assets
         fields = "__all__"
 
+
 class GmSheetDetailedSerializer(serializers.ModelSerializer):
-    sales_name = serializers.CharField(source="sales.name", allow_null=True)   
+    sales_name = serializers.CharField(source="sales.name", allow_null=True)
+
     class Meta:
         model = GmSheet
         fields = "__all__"
 
+
 class GmSheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = GmSheet
-        fields = '__all__'
-        
+        fields = "__all__"
+
+
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields =  '__all__'
+        fields = "__all__"
+
 
 class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
     sales_order_exists = serializers.SerializerMethodField()
@@ -286,21 +317,22 @@ class GmSheetSalesOrderExistsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GmSheet
-        fields = '__all__'
+        fields = "__all__"
 
     def get_sales_order_exists(self, obj):
         return SalesOrder.objects.filter(gm_sheet_id=obj.id).exists()
 
     def get_offering_grossmargin(self, obj):
         offerings = Offering.objects.filter(gm_sheet=obj)
-        return [offering.gross_margin for offering in offerings if offering.gross_margin]
-
+        return [
+            offering.gross_margin for offering in offerings if offering.gross_margin
+        ]
 
 
 class OfferingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Offering
-        fields = '__all__'
+        fields = "__all__"
 
 
 class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
@@ -321,7 +353,39 @@ class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer)
         model = HandoverDetails
         fields = "__all__"
 
+
 class MentoringSessionsSerializer(serializers.ModelSerializer):
     class Meta:
         model = MentoringSessions
         fields = "__all__"
+
+class GroupSerializer(serializers.ModelSerializer):
+    employees = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all(), many=True)
+    employee_names = serializers.SerializerMethodField()
+    seeq_project_name = serializers.SerializerMethodField()
+    caas_project_name = serializers.SerializerMethodField()
+    owner_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Group
+        fields = "__all__"
+
+    def get_employee_names(self, instance):
+        employees = instance.employees.all()
+        return [f"{employee.first_name} {employee.last_name}" for employee in employees]
+
+    def get_seeq_project_name(self, instance):
+        if instance.seeq_project:
+            return instance.seeq_project.name
+        return None
+
+    def get_caas_project_name(self, instance):
+        if instance.caas_project:
+            return instance.caas_project.name
+        return None
+
+    def get_owner_name(self, instance):
+        if instance.owner:
+            return f"{instance.owner.first_name} {instance.owner.last_name}"
+        return None
+

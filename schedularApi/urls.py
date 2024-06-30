@@ -35,6 +35,53 @@ urlpatterns = [
     path("employees/", views.get_employees, name="get_employees"),
     path("update-employee/", views.update_employee, name="update_employee"),
     path("delete-employee/", views.delete_employee, name="delete_employee"),
+    path("create-group/<int:user_id>/", views.create_group, name="create_group"),
+    path("leader-create-group/", views.group_create_leader, name="group_create_leader"),
+    path("group/", views.get_all_groups, name="get-all-groups"),
+    path(
+        "employee-detail/<int:group_id>/",
+        views.group_employee_detail,
+        name="group-employee-detail",
+    ),
+    path(
+        "view-groups-for-employee/<int:user_id>/",
+        views.view_groups_for_employee,
+        name="view_groups_for_employee",
+    ),
+    path("group-detail/<int:group_id>/", views.group_detail, name="group-detail"),
+    path("edit-group/<int:pk>/", views.edit_group),
+    path("delete-group/<int:pk>/", views.delete_group),
+    path("tasks/", views.get_all_tasks, name="get_all_tasks"),
+    path(
+        "employee-task/<int:employee_id>/",
+        views.get_tasks_for_employee,
+        name="get_tasks_for_employee",
+    ),
+    path(
+        "create-management-task/",
+        views.create_management_task,
+        name="create_management_task",
+    ),
+    path(
+        "group-tasks/<int:group_id>/",
+        views.get_all_group_tasks,
+        name="get_all_group_tasks",
+    ),
+    path(
+        "edit-management-task/<int:pk>/",
+        views.edit_management_task,
+        name="edit_management_task",
+    ),
+    path(
+        "delete-management-task/<int:pk>/",
+        views.delete_management_task,
+        name="delete_management_task",
+    ),
+    path(
+        "employee-task/<int:employee_id>/<int:group_id>/",
+        views.get_tasks_for_employee_groupwise,
+        name="get_task_of_employee_groupwise",
+    ),
     path(
         "current-or-next-year/",
         views.get_current_or_next_year,
@@ -545,5 +592,8 @@ urlpatterns = [
         views.get_mentoring_session_of_that_faculty,
         name="get_mentoring_session_of_that_faculty",
     ),
-    path("project/<str:project_type>/<int:project_id>/gmsheet/", views.get_gm_sheet_of_project),
+    path(
+        "project/<str:project_type>/<int:project_id>/gmsheet/",
+        views.get_gm_sheet_of_project,
+    ),
 ]
