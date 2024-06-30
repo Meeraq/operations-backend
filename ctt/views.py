@@ -17,6 +17,7 @@ from .serializers import (
     BatchSerializer,
     FacultiesSerializer,
     SessionsSerializerDepthOne,
+    MentorCoachSessionsSerializer,
 )
 from django.http import HttpResponse
 import pandas as pd
@@ -845,12 +846,8 @@ def get_participants_of_that_batch(request, batch_id):
             batch_name = batch_user.batch.name
             batch_start_date = batch_user.batch.start_date
             program_name = batch_user.batch.program.name
-            salesorders = (
-                SalesOrder.objects.filter(zoho_customer__email=batch_user.user.email)
-                .select_related("zoho_customer")
-                .first()
-            )
-            background = salesorders.background if salesorders else ""
+            
+            
 
             assignment_completion = (
                 UserAssignments.objects.using("ctt")
@@ -869,6 +866,10 @@ def get_participants_of_that_batch(request, batch_id):
                 custom_field_hash__cf_ctt_batch=batch_user.batch.name,
             )
             payment_status = None
+
+            background = salesorders.first().background if salesorders.first() else ""
+
+            performance_evaluation = salesorders.first().performance_evaluation if salesorders.first() else ""
 
             for sales_order in salesorders:
                 if sales_order.invoiced_status != "invoiced":
@@ -896,6 +897,7 @@ def get_participants_of_that_batch(request, batch_id):
                 "organisation": organization_name,
                 "payment_status": payment_status,
                 "background": background,
+                "performance_evaluation":performance_evaluation,
             }
 
             index += 1
@@ -1146,10 +1148,14 @@ def get_upcoming_sessions(request):
                 batch__batchfaculty__faculty__email=faculty_email
             )
 
+        participant_count = 0
         if batch_id:
             upcoming_sessions = upcoming_sessions.filter(
                 batch__id=int(batch_id)
             ).order_by("date", "start_time")
+            participant_count = (
+                BatchUsers.objects.using("ctt").filter(batch=int(batch_id)).count()
+            )
 
         all_sessions = []
         for session in upcoming_sessions:
@@ -1177,6 +1183,7 @@ def get_upcoming_sessions(request):
                     "description": session.description,
                     "type": session.type,
                     "session_attendance": (user_names if user_names else []),
+                    "total_participants": participant_count,
                 }
             )
 
@@ -1208,9 +1215,14 @@ def get_past_sessions(request):
                 batch__batchfaculty__faculty__email=faculty_email
             )
 
+        participant_count = 0
+
         if batch_id:
             past_sessions = past_sessions.filter(batch__id=int(batch_id)).order_by(
                 "-date", "-start_time"
+            )
+            participant_count = (
+                BatchUsers.objects.using("ctt").filter(batch=int(batch_id)).count()
             )
 
         all_sessions = []
@@ -1240,6 +1252,7 @@ def get_past_sessions(request):
                     "description": session.description,
                     "type": session.type,
                     "session_attendance": (user_names if user_names else []),
+                    "total_participants": participant_count,
                 }
             )
 
@@ -1446,6 +1459,7 @@ def send_calendar_invites(request):
         return Response({"error": "Failed to send invites"}, status=500)
 
 
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def download_training_attendance_data(request, batch_id):
@@ -1496,3 +1510,139 @@ def download_training_attendance_data(request, batch_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def training_attendance_data(request, batch_id):
+    try:
+        batch = Batches.objects.using("ctt").get(id=batch_id)
+        sessions = Sessions.objects.using("ctt").filter(
+            batch=batch,
+            deleted_at__isnull=True,
+        )
+        batch_users = BatchUsers.objects.using("ctt").filter(
+            batch=batch,
+            deleted_at__isnull=True,
+        )
+        data = []
+
+        for batch_user in batch_users:
+            temp = {
+                "participant_name": batch_user.user.first_name
+                + " "
+                + batch_user.user.last_name
+            }
+            for session in sessions:
+                ctt_attendance = CttSessionAttendance.objects.filter(
+                    session=session.id
+                ).first()
+                is_present = False
+                if ctt_attendance:
+                    if batch_user.id in ctt_attendance.attendance:
+                        is_present = True
+
+                temp[f"Session {session.session_no}"] = is_present
+
+            data.append(temp)
+
+        return Response(data)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_mentoring_session_from_lms(request, email, ctt_pmo):
+    try:
+        if ctt_pmo == "true":
+            mentoring_sessions = MentorCoachSessions.objects.using("ctt").all().order_by("-created_at")
+        else:
+            mentoring_sessions = MentorCoachSessions.objects.using("ctt").filter(faculty__email=email).order_by("-created_at")
+        session_data = []
+        
+        for mentoring_session in mentoring_sessions:
+            batch = Batches.objects.using("ctt").get(id=mentoring_session.batch.id)
+            batch_name = batch.name
+            
+            participant = Users.objects.using("ctt").get(id=mentoring_session.user.id)
+            participant_name = participant.first_name + " " + participant.last_name
+            
+            faculty = Faculties.objects.using("ctt").get(id=mentoring_session.faculty.id)
+            faculty_name = faculty.first_name + " " + faculty.last_name
+            
+            session_info = {
+                "id": mentoring_session.id,
+                "batch": mentoring_session.batch.id,
+                "batch_name": batch_name,
+                "faculty": mentoring_session.faculty.id,
+                "faculty_name": faculty_name,
+                "user": mentoring_session.user.id,
+                "user_name": participant_name,
+                "session_no": mentoring_session.session_no,
+                "status": mentoring_session.status,
+                "feedback": mentoring_session.feedback,
+                "date": mentoring_session.date,
+                "created_at": mentoring_session.created_at,
+                "updated_at": mentoring_session.updated_at,
+                "deleted_at": mentoring_session.deleted_at,
+            }
+            
+            session_data.append(session_info)
+
+        return Response(session_data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+  
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])    
+def get_lms_mentoring_session_data_batch_wise(request,batch_id):
+    try:
+        mentoring_sessions = MentorCoachSessions.objects.using("ctt").filter(batch_id=batch_id).order_by("-created_at")
+        session_data = []
+
+        for mentoring_session in mentoring_sessions:
+            batch = Batches.objects.using("ctt").get(id=mentoring_session.batch.id)
+            batch_name = batch.name
+            
+            participant = Users.objects.using("ctt").get(id=mentoring_session.user.id)
+            participant_name = f"{participant.first_name} {participant.last_name}"
+            
+            faculty = Faculties.objects.using("ctt").get(id=mentoring_session.faculty.id)
+            faculty_name = f"{faculty.first_name} {faculty.last_name}"
+            
+            session_info = {
+                "id": mentoring_session.id,
+                "batch": mentoring_session.batch.id,
+                "batch_name": batch_name,
+                "faculty": mentoring_session.faculty.id,
+                "faculty_name": faculty_name,
+                "user": mentoring_session.user.id,
+                "user_name": participant_name,
+                "session_no": mentoring_session.session_no,
+                "status": mentoring_session.status,
+                "feedback": mentoring_session.feedback,
+                "date": mentoring_session.date,
+                "created_at": mentoring_session.created_at,
+                "updated_at": mentoring_session.updated_at,
+                "deleted_at": mentoring_session.deleted_at,
+            }
+            
+            session_data.append(session_info)
+
+        return Response(session_data, status=status.HTTP_200_OK)
+    
+    except MentorCoachSessions.DoesNotExist:
+        return Response({"error": f"Mentoring sessions for batch ID {batch_id} do not exist."}, status=status.HTTP_404_NOT_FOUND)
+    
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+
+
+
+
+
+    
