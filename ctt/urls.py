@@ -100,6 +100,16 @@ urlpatterns = [
         name="send_calendar_invites",
     ),
     path(
+        "get-mentoring-session-from-lms/<str:email>/<str:ctt_pmo>/",
+        views.get_mentoring_session_from_lms,
+        name="get_mentoring_session_from_lms",
+    ),
+    path(
+        "get-lms-mentoring-session-data-batch-wise/<int:batch_id>/",
+        views.get_lms_mentoring_session_data_batch_wise,
+        name="get_lms_mentoring_session_data_batch_wise",
+    ),
+    path(
         "download-training-attendance-data/<int:batch_id>/",
         views.download_training_attendance_data,
         name="download_training_attendance_data",
