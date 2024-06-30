@@ -3074,6 +3074,7 @@ def get_all_sales_orders_of_project(request, project_id, project_type):
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_client_invoices_of_project(request, project_id, project_type):
@@ -3082,14 +3083,17 @@ def get_all_client_invoices_of_project(request, project_id, project_type):
         so_ids = set()
         for sales_order in all_sales_orders:
             so_ids.add(sales_order["salesorder_id"])
-            
-        client_invoices = ClientInvoice.objects.filter(sales_order__salesorder_id__in=list(so_ids))
-        serializer = ClientInvoiceSerializer(client_invoices, many=True)  
-        
+
+        client_invoices = ClientInvoice.objects.filter(
+            sales_order__salesorder_id__in=list(so_ids)
+        )
+        serializer = ClientInvoiceSerializer(client_invoices, many=True)
+
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -3134,7 +3138,7 @@ def get_ctt_client_invoices_for_participant(request, participant_email, batch_na
             zoho_customer__email=participant_email,
             sales_order__custom_field_hash__cf_ctt_batch=batch_name,
         )
-      
+
         all_client_invoices = ClientInvoiceGetSerializer(
             client_invoices, many=True
         ).data
@@ -3279,6 +3283,10 @@ def get_sales_order_data(request, salesorder_id):
         if response.status_code == 200:
             sales_order = response.json().get("salesorder")
             gm_sheet = None
+            background = None
+            designation = None
+            linkedin_profile = None
+            referred_by = None
             existing_sales_order = SalesOrder.objects.filter(
                 salesorder_id=sales_order["salesorder_id"]
             ).first()
@@ -3288,8 +3296,20 @@ def get_sales_order_data(request, salesorder_id):
                     if existing_sales_order.gm_sheet
                     else None
                 )
+                background = existing_sales_order.background
+                designation = existing_sales_order.designation
+                linkedin_profile = existing_sales_order.linkedin_profile
+                referred_by = existing_sales_order.referred_by
             return Response(
-                {**sales_order, "gm_sheet": gm_sheet}, status=status.HTTP_200_OK
+                {
+                    **sales_order,
+                    "gm_sheet": gm_sheet,
+                    "background": background,
+                    "linkedin_profile": linkedin_profile,
+                    "referred_by": referred_by,
+                    "designation": designation,
+                },
+                status=status.HTTP_200_OK,
             )
         else:
             return Response(
@@ -3467,6 +3487,7 @@ def create_sales_order(request):
                 sales_order.linkedin_profile = JSONString.get("linkedInProfile", "")
                 sales_order.background = JSONString.get("background", "")
                 sales_order.designation = JSONString.get("designation", "")
+                sales_order.companies_worked_in = JSONString.get("companies_worked_in", "")
                 sales_order.save()
 
             gm_sheet_id = request.data.get("gm_sheet", "")
@@ -4731,12 +4752,24 @@ def get_latest_data(request):
 @permission_classes([IsAuthenticated])
 def get_ctt_revenue_data(request):
     try:
-        # Filter sales orders containing "CTT" in their sales order number
-        sales_orders = SalesOrder.objects.filter(
+        start_date = request.query_params.get("start_date", "")
+        end_date = request.query_params.get("end_date", "")
+
+        if start_date:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        filters = (
             Q(salesorder_number__icontains="CTT")
             | Q(salesorder_number__icontains="ctt")
             | Q(salesorder_number__icontains="Ctt")
         )
+        if start_date and end_date:
+            filters &= Q(created_date__range=[start_date, end_date])
+
+        sales_orders = SalesOrder.objects.filter(filters)
+
         data = {}
         total = 0
         monthly_sales_order = {}
@@ -4801,6 +4834,12 @@ def get_sales_of_each_program(request):
     try:
         start_date = request.query_params.get("start_date", "")
         end_date = request.query_params.get("end_date", "")
+
+        if start_date:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        if end_date:
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
         all_batches = Batches.objects.using("ctt").all().order_by("-created_at")
         l1_batches = []
         l2_batches = []
@@ -4816,12 +4855,13 @@ def get_sales_of_each_program(request):
                 l3_batches.append(batch.name)
             elif batch.program.certification_level.name == "ACTC":
                 actc_batches.append(batch.name)
-        # date_query = ""
-        # if start_date and end_date:
-        #     date_query = f"&date_start={start_date}&date_end={end_date}"
-        # query_params = f"&salesorder_number_contains=CTT{date_query}"
-        # sales_orders = fetch_sales_orders(organization_id, query_params)
-        sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
+
+        filters = Q(salesorder_number__startswith="CTT")
+        if start_date and end_date:
+            filters &= Q(created_date__range=[start_date, end_date])
+
+        sales_orders = SalesOrder.objects.filter(filters)
+
         program_totals = {
             "L1": 0,
             "L2": 0,
@@ -5224,17 +5264,17 @@ def calculate_financials(project_id, project_type):
     purchase_all_bills_paid = []
 
     for purchase_order in purchase_orders:
-        purchase_order_cost += (
-            Decimal(str(purchase_order.total)) * purchase_order.exchange_rate
-        )
+        purchase_order_cost += Decimal(str(purchase_order.total)) * Decimal(
+            purchase_order.exchange_rate
+        )  # Change here
         for bill in purchase_order.bills:
-            purchase_billed_amount += (
-                Decimal(str(bill["total"])) * purchase_order.exchange_rate
-            )
+            purchase_billed_amount += Decimal(str(bill["total"])) * Decimal(
+                purchase_order.exchange_rate
+            )  # Change here
             if bill["status"] == "paid":
-                purchase_paid_amount += (
-                    Decimal(str(bill["total"])) * purchase_order.exchange_rate
-                )
+                purchase_paid_amount += Decimal(str(bill["total"])) * Decimal(
+                    purchase_order.exchange_rate
+                )  # Change here
                 purchase_all_bills_paid.append(True)
             else:
                 purchase_all_bills_paid.append(False)
@@ -5250,7 +5290,7 @@ def calculate_financials(project_id, project_type):
     ).distinct()
     expected_revenue, expected_cost = Decimal("0.0"), Decimal("0.0")
     expected_currency = None
-    expected_profitability=0
+    expected_profitability = 0
 
     for gm_sheet in gm_sheets:
         expected_currency = gm_sheet.currency
@@ -5276,7 +5316,7 @@ def calculate_financials(project_id, project_type):
         "expected_currency": expected_currency,
         "expected_cost": expected_cost,
         "expected_revenue": expected_revenue,
-        "expected_profitability":expected_profitability
+        "expected_profitability": expected_profitability,
     }
 
 
@@ -5298,12 +5338,12 @@ def all_project_financials(request):
         projects = (
             Project.objects.all()
             .select_related("organisation")
-            .only("id", "organisation__name", "name", "project_type","created_at")
+            .only("id", "organisation__name", "name", "project_type", "created_at")
         )
         schedular_projects = (
             SchedularProject.objects.all()
             .select_related("organisation")
-            .only("id", "organisation__name", "name", "project_type","created_at")
+            .only("id", "organisation__name", "name", "project_type", "created_at")
         )
 
         combined_projects = [
@@ -5323,7 +5363,11 @@ def all_project_financials(request):
                 "organisation": schedular_project.organisation.name,
                 "name": schedular_project.name,
                 "project_type_extra": schedular_project.project_type,
-                "created_at": schedular_project.created_at if schedular_project.created_at else None,
+                "created_at": (
+                    schedular_project.created_at
+                    if schedular_project.created_at
+                    else None
+                ),
             }
             for schedular_project in schedular_projects
         ]

@@ -1404,6 +1404,7 @@ def edit_ctt_faculty(request, ctt_faculty_id):
     name = request.data.get("name")
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
+    is_assessor =  request.data.get("is_assessor")
     ctt_faculty = CTTFaculty.objects.get(id=ctt_faculty_id)
 
     try:
@@ -1424,6 +1425,8 @@ def edit_ctt_faculty(request, ctt_faculty_id):
             ctt_faculty.email = email
             ctt_faculty.name = name
             ctt_faculty.phone = phone
+            ctt_faculty.is_assessor = is_assessor
+            
             ctt_faculty.save()
             if ctt_faculty.phone:
                 add_contact_in_wati("pmo", ctt_faculty.name, ctt_faculty.phone)
@@ -6651,7 +6654,7 @@ def edit_competency(request, competency_id):
     competency_name = request.data["name"]
     if (
         not Competency.objects.filter(name=competency_name, goal__id=competency.goal.id)
-        .exclude(id=competency.goal.id)
+        .exclude(id=competency.id)
         .exists()
     ):
         if serializer.is_valid():
@@ -13088,7 +13091,7 @@ def get_user_feedback_repsonses(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def mira_assistant(request):
     try:
         client = OpenAI()

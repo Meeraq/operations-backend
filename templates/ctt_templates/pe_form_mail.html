@@ -1,0 +1,39 @@
+{% extends "table_parent_template.html" %}
+
+{% block title %}
+  Meeraq Coaching | Handover updated
+{% endblock %}
+
+{% block content %}
+<tr style="border: 0">
+  <td style="padding: 20px; background: #f8f7f8; border: 0">
+    <div align="center">
+      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; mso-cellspacing: 0cm; background: #f8f7f8; mso-yfti-tbllook: 1184; mso-padding-alt: 0cm 0cm 0cm 0cm;" width="100%">
+        <tbody>
+          <tr style="mso-yfti-irow: 0; mso-yfti-firstrow: yes; mso-yfti-lastrow: yes;">
+            <td style="padding: 15pt 15pt 15pt 15pt"
+              <p>
+                <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
+                ><b>{{name}}</b><strong>,</strong>
+              </p>
+                    <p>Please complete your Performance Evaluation by following the steps below:</p>
+
+                <ol>
+                    <li>Click the link to log in.</li>
+                    <li>Enter the links to your PE recording transcript and PE audio.</li>
+                </ol>
+
+                <p><a href="{{link}}">{{link}}</a></p>
+
+                <p>Ensure you have shared access to your PE recording and transcript. Your timely completion helps us support your training progress.</p>
+           
+                <p>Thank you!</p>
+
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </td>
+</tr>
+{% endblock %}
