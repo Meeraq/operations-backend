@@ -53,6 +53,8 @@ def get_user_name(user):
             return user.profile.pmo.name
         elif role == "coach":
             return user.profile.coach.first_name + " " + user.profile.coach.last_name
+        elif role == "employee":
+            return user.profile.employee.first_name + " " + user.profile.employee.last_name
         elif role == "vendor":
             return user.profile.vendor.name
         elif role == "hr":
@@ -162,6 +164,7 @@ class Profile(models.Model):
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
         ("finance", "finance"),
+        ("employee", "employee"),
         ("sales", "sales"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -219,7 +222,8 @@ class Leader(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+
 class Curriculum(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -263,13 +267,15 @@ class CTTPmo(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+
 class CTTFaculty(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
     active_inactive = models.BooleanField(default=True)
+    is_assessor = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -313,7 +319,7 @@ class Coach(models.Model):
     job_roles = models.JSONField(default=list, blank=True)
     competency = models.JSONField(default=list, blank=True)
     credentials_feels_like = models.CharField(max_length=100, blank=True)
-    coaching_type=models.CharField(max_length=100, blank=True)
+    coaching_type = models.CharField(max_length=100, blank=True)
     coaching_hours = models.CharField(max_length=50, blank=True)
     created_at = models.DateField(auto_now_add=True)
     edited_at = models.DateField(auto_now=True)
@@ -550,7 +556,8 @@ class Update(models.Model):
 
 
 class OTP(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    email = models.CharField(max_length=225, null=True, blank=True)
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -803,13 +810,14 @@ class StandardizedField(models.Model):
         ("city", "City"),
         ("country", "Country"),
         ("topic", "Topic"),
-        ("product_type","Product Type"),
-        ("category","Category"),
-        ("asset_location","Location"),
-        ("project_type","Project Type"),
-        ("credentials_feels_like","Credential Feels like"),
-        ("competency","Competency"),
-        ("coaching_type","Coaching Type"),
+        ("product_type", "Product Type"),
+        ("category", "Category"),
+        ("asset_location", "Location"),
+        ("project_type", "Project Type"),
+        ("credentials_feels_like", "Credential Feels like"),
+        ("competency", "Competency"),
+        ("coaching_type", "Coaching Type"),
+        ("function","Function")
     )
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
     values = models.JSONField(default=list, blank=True)
@@ -1049,21 +1057,22 @@ class UserFeedback(models.Model):
 
 class ChatHistory(models.Model):
     USER_TYPE_CHOICES = [
-        ('ctt_pmo', 'CTT PMO'),
-        ('pmo', 'Meeraq PMO'),
-        ('curriculum', 'Curriculum'),
-        ('sales', 'Sales'),
-        ('finance','Finance')
+        ("ctt_pmo", "CTT PMO"),
+        ("pmo", "Meeraq PMO"),
+        ("curriculum", "Curriculum"),
+        ("sales", "Sales"),
+        ("finance", "Finance"),
     ]
     prompt = models.TextField(blank=True, null=True, default=None)
     response = models.TextField(blank=True, null=True, default=None)
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
-    is_old = models.BooleanField(blank=True,default=False)
+    is_old = models.BooleanField(blank=True, default=False)
     email = models.EmailField(blank=True, null=True)
-    user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, blank=True, null=True)
+    user_type = models.CharField(
+        max_length=20, choices=USER_TYPE_CHOICES, blank=True, null=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Chat History for {self.user}"
-

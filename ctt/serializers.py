@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Batches, Faculties, Sessions
+from .models import Batches, Faculties, Sessions, MentorCoachSessions
 
 
 class BatchSerializer(serializers.ModelSerializer):
@@ -19,3 +19,8 @@ class SessionsSerializerDepthOne(serializers.ModelSerializer):
         model = Sessions
         fields = "__all__"
         depth = 1
+
+class MentorCoachSessionsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MentorCoachSessions
+        fields = '__all__'

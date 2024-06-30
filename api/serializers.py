@@ -49,7 +49,7 @@ from .models import (
 )
 from django.contrib.auth.models import User
 from schedularApi.models import ProjectContract, CoachContract
-
+from schedularApi.models import Employee
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -67,6 +67,12 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
 class CTTPmoDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = CTTPmo
+        fields = "__all__"
+        depth = 1
+
+class EmployeeDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
         fields = "__all__"
         depth = 1
         

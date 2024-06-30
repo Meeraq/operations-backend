@@ -190,7 +190,6 @@ class ActionItemSerializer(serializers.ModelSerializer):
         model = ActionItem
         fields = "__all__"
 
-
 class ActionItemDetailedSerializer(serializers.ModelSerializer):
     learner_name = serializers.CharField(source="learner.name", allow_null=True)
     batch_name = serializers.CharField(source="batch.name", allow_null=True)

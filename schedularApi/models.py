@@ -16,6 +16,9 @@ from api.models import (
     Project,
     Template,
 )
+from ctt.models import (
+    Batches
+)
 from django.utils import timezone
 from django.contrib.auth.models import User
 from datetime import datetime
@@ -396,14 +399,74 @@ class Expense(models.Model):
         return f"{self.name}"
 
 
+
 class Employee(models.Model):
+    ROLE_CHOICES = [
+        ('head', 'Head'),
+        ('team_member', 'Team Member'),
+    ]
+
+    ORGANISATION_CHOICES = [
+        ('ctt', 'CTT'),
+        ('meeraq', 'Meeraq'),
+    ]
+
     first_name = models.CharField(max_length=30)
     last_name = models.CharField(max_length=30)
     phone_number = models.CharField(max_length=15)
     email = models.EmailField(unique=True)
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True, null=True) 
+    function = models.CharField(max_length=255, null=True)
+    active_inactive = models.BooleanField(default=True)
+    role = models.CharField(max_length=11, choices=ROLE_CHOICES, default='team_member')
+    organisation = models.CharField(max_length=6, choices=ORGANISATION_CHOICES, default='meeraq')
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+
+class Group(models.Model):
+    ORGANISATION_CHOICES = [
+        ('ctt', 'CTT'),
+        ('meeraq', 'Meeraq'),
+    ]
+    name = models.CharField(max_length=100)
+    employees = models.ManyToManyField(Employee, related_name='groups')
+    caas_project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='caas_groups', null=True, blank=True)
+    seeq_project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE, related_name='seeq_groups', null=True, blank=True)
+    batch = models.IntegerField(blank=True, null=True)
+    organisation = models.CharField(max_length=6, choices=ORGANISATION_CHOICES, default='ctt')
+    owner =models.ForeignKey(Employee,on_delete=models.CASCADE,null=True,blank=True)
+    inactive = models.BooleanField(default=False)
+    def __str__(self):
+        return self.name
+    
+class ManagementTask(models.Model):
+    STATUS_CHOICES = [
+        ('not_started', 'Not Started'),
+        ('ongoing', 'Ongoing'),
+        ('completed', 'Completed'),
+    ]
+    PRIORITY_CHOICES = [
+        ('high', 'High'),
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+    ]
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True, max_length=255)
+    employee = models.ManyToManyField(Employee,null=True,blank=True)
+    start_date = models.DateTimeField(null=True, blank=True,default=None)
+    deadline = models.DateTimeField(null=True, blank=True,default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_started')
+    group = models.ForeignKey(Group,on_delete=models.CASCADE,null=True,blank=True)
+    effort = models.CharField(max_length=25,null=True,blank=True)
+    actual_effort= models.CharField(max_length=25,null=True,blank=True)
+    actual_start_date=models.DateTimeField(null=True, blank=True,default=None)
+    actual_end_date=models.DateTimeField(null=True, blank=True,default=None)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='low')
+    def __str__(self):
+        return self.name
 
 
 class Assets(models.Model):

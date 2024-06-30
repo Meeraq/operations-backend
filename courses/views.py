@@ -41,6 +41,7 @@ from .models import (
     CttFeedback,
     CttFeedbackResponse,
     NudgeResources,
+    CttParticipantPerformanceEvaluation,
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -99,6 +100,7 @@ from api.models import (
     SessionRequestCaas,
     Project,
     Curriculum,
+    OTP,
 )
 from api.serializers import ProjectSerializer
 from schedularApi.models import (
@@ -159,6 +161,7 @@ from schedularApi.tasks import (
 from django.core.mail import EmailMessage
 from django.conf import settings
 from api.permissions import IsInRoles
+from api.views import send_mail_templates, get_random_string
 
 env = environ.Env()
 
@@ -4309,7 +4312,9 @@ def get_feedback(request, feedback_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_end_meeting_feedback_response_data(request):
     try:
-        coach_session_feedback_responses = CoachingSessionsFeedbackResponse.objects.all()
+        coach_session_feedback_responses = (
+            CoachingSessionsFeedbackResponse.objects.all()
+        )
         data = []
 
         for coach_session_feedback_response in coach_session_feedback_responses:
@@ -4339,7 +4344,11 @@ def get_end_meeting_feedback_response_data(request):
                 }
             elif coach_session_feedback_response.schedular_session:
                 seeq_session = coach_session_feedback_response.schedular_session
-                coach_name = seeq_session.availibility.coach.first_name + " " +seeq_session.availibility.coach.last_name  
+                coach_name = (
+                    seeq_session.availibility.coach.first_name
+                    + " "
+                    + seeq_session.availibility.coach.last_name
+                )
 
                 temp = {
                     "feedback_responses_id": coach_session_feedback_response.id,
@@ -4354,12 +4363,14 @@ def get_end_meeting_feedback_response_data(request):
 
             answer_data = []
             for answer in coach_session_feedback_response.answers.all():
-                answer_data.append({
-                    "question": answer.question.text,
-                    "rating": answer.rating,
-                    "selected_answer": answer.selected_options,
-                    "type": answer.question.type,
-                })
+                answer_data.append(
+                    {
+                        "question": answer.question.text,
+                        "rating": answer.rating,
+                        "selected_answer": answer.selected_options,
+                        "type": answer.question.type,
+                    }
+                )
 
             temp["answer_data"] = answer_data
 
@@ -4372,7 +4383,7 @@ def get_end_meeting_feedback_response_data(request):
             data.append(temp)
 
         return Response(data)
-    
+
     except Exception as e:
         print(str(e))  # Log the actual exception for debugging purposes
         return Response(
@@ -4760,6 +4771,7 @@ def get_ctt_feedback(request):
             feedback_responses = CttFeedbackResponse.objects.filter(
                 ctt_feedback=ctt_feedback
             ).count()
+
             data = {
                 "id": ctt_feedback.id,
                 "name": ctt_feedback.name,
@@ -5044,3 +5056,194 @@ def release_ctt_certificates_multiple_participants(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to release certificates"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def release_ctt_pe_multiple_participants(request):
+    try:
+        batch_user_ids = request.data.get("batch_user_ids")
+
+        for batch_user_id in batch_user_ids:
+            batch_user = BatchUsers.objects.using("ctt").get(id=batch_user_id)
+            learner_name = f"{batch_user.user.first_name} {batch_user.user.last_name}"
+            content = {"learner_name": learner_name}
+
+            send_mail_templates(
+                "ctt_templates/pe_form_mail.html",
+                [batch_user.user.email],
+                "Coach-To-Transformation | Performance Evaluation Form",
+                {
+                    "name": batch_user.user.first_name,
+                    "link": f"{env('CAAS_APP_URL')}/performace-evaluation-form/{batch_user.batch.id}",
+                },
+                [],  # no bcc
+            )
+
+        return Response({"message": "PE Form released successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to release PE Form"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def store_pe_participant_data(request):
+    try:
+        batch_user_id = request.data.get("batch_user_id")
+
+        transcript_link = request.data.get("audio_link")
+        audio_link = request.data.get("audio_link")
+
+        batch_user = BatchUsers.objects.using("ctt").get(id=batch_user_id)
+
+        existing_pe = CttParticipantPerformanceEvaluation.objects.filter(
+            batch=batch_user.batch.id, participant=batch_user.user.id
+        )
+
+        if existing_pe.count() > 1 :
+            return Response(
+                    {
+                        "error": "You have already submitted the performance evaluation form."
+                    },
+                    status=500,
+                )
+        elif existing_pe.count() == 1 :
+            if  existing_pe.first().result == "pass":
+            
+                return Response(
+                    {
+                        "error": "You have already submitted the performance evaluation form."
+                    },
+                    status=500,
+                )
+        participant_pe = CttParticipantPerformanceEvaluation.objects.create(
+            batch=batch_user.batch.id,
+            participant=batch_user.user.id,
+            transcript_link=transcript_link,
+            audio_link=audio_link,
+        )
+
+        return Response({"message": "Form submitted successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to submit form"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def ctt_performance_email_otp_send(request):
+    try:
+        email = request.data.get("email").strip().lower()
+
+        otp = get_random_string(length=6, allowed_chars="0123456789")
+
+        created_otp, created = OTP.objects.get_or_create(email=email)
+
+        created_otp.otp = otp
+        created_otp.save()
+
+        send_mail_templates(
+            "ctt_templates/ctt_otp.html",
+            [email],
+           "Performance Evaluation: OTP Validation Required",
+            {
+                "otp": created_otp.otp,
+                "email": email,
+            },
+            [],
+        )
+
+        return Response({"message": "OTP sent successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to send otp"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def ctt_performance_email_otp_validate(request):
+    try:
+        email = request.data.get("email").strip().lower()
+        otp = request.data.get("otp").strip().lower()
+        batch_id = request.data.get("batch_id")
+
+        otp_record = OTP.objects.get(email=email)
+        if otp_record.otp == otp:
+
+            batch_user = BatchUsers.objects.using("ctt").get(
+                batch__id=int(batch_id), user__email=email
+            )
+            return Response(
+                {
+                    "message": "OTP verified successfully!",
+                    "data": {
+                        "batch_name": batch_user.batch.name,
+                        "name": batch_user.user.first_name
+                        + " "
+                        + batch_user.user.last_name,
+                        "email": batch_user.user.email,
+                        "phone": batch_user.user.phone,
+                        "batch_user_id": batch_user.id,
+                    },
+                },
+                status=200,
+            )
+        else:
+            return Response({"error": "Please enter correct OTP."}, status=500)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": f"Failed to validate OTP."}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_pe(request):
+    try:
+        performance_evaluations = (
+            CttParticipantPerformanceEvaluation.objects.all().order_by("-created_at")
+        )
+
+        data = []
+        for performance_evaluation in performance_evaluations:
+            batch_user = BatchUsers.objects.using("ctt").get(
+                batch__id=performance_evaluation.batch,
+                user__id=performance_evaluation.participant,
+            )
+            data.append(
+                {
+                    "id": performance_evaluation.id,
+                    "batch_name": batch_user.batch.name,
+                    "participant_name": batch_user.user.first_name
+                    + " "
+                    + batch_user.user.last_name,
+                    "transcript_link": performance_evaluation.transcript_link,
+                    "audio_link": performance_evaluation.audio_link,
+                    "program_name": batch_user.batch.program.name,
+                    "result":performance_evaluation.result,
+                }
+            )
+
+            return Response(data)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_pe_result(request):
+    try:
+        pe_id = request.data.get("id")
+        status = request.data.get("status").strip().lower()
+
+        ctt_pe = CttParticipantPerformanceEvaluation.objects.get(id=pe_id)
+        ctt_pe.result = status
+        ctt_pe.save()
+        return Response({"message": "Result Updated Successfully."}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": f"Failed to update result."}, status=500)
