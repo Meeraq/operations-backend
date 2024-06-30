@@ -418,3 +418,20 @@ class CttCalendarInvites(models.Model):
     creator = models.CharField(max_length=255, blank=True, null=True)
     ctt_session = models.IntegerField(blank=True, null=True)
     ctt_user = models.IntegerField(blank=True, null=True)
+
+
+class CttParticipantPerformanceEvaluation(models.Model):
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("pass", "Pass"),
+        ("fail", "Fail"),
+    ]
+
+    batch = models.IntegerField(blank=True, null=True)
+    participant = models.IntegerField(blank=True, null=True)
+    transcript_link = models.TextField(blank=True, null=True)
+    audio_link = models.TextField(blank=True, null=True)
+    result = models.CharField(max_length=255, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

@@ -27,6 +27,7 @@ from .models import (
     CoachingSessionsFeedbackResponse,
     CttFeedback,
     CttFeedbackResponse,
+    CttParticipantPerformanceEvaluation,
 )
 
 # Register your models here.
@@ -57,3 +58,4 @@ admin.site.register(Feedback)
 admin.site.register(CoachingSessionsFeedbackResponse)
 admin.site.register(CttFeedback)
 admin.site.register(CttFeedbackResponse)
+admin.site.register(CttParticipantPerformanceEvaluation)

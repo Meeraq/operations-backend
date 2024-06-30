@@ -1401,6 +1401,7 @@ def edit_ctt_faculty(request, ctt_faculty_id):
     name = request.data.get("name")
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
+    is_assessor =  request.data.get("is_assessor")
     ctt_faculty = CTTFaculty.objects.get(id=ctt_faculty_id)
 
     try:
@@ -1421,6 +1422,8 @@ def edit_ctt_faculty(request, ctt_faculty_id):
             ctt_faculty.email = email
             ctt_faculty.name = name
             ctt_faculty.phone = phone
+            ctt_faculty.is_assessor = is_assessor
+            
             ctt_faculty.save()
             if ctt_faculty.phone:
                 add_contact_in_wati("pmo", ctt_faculty.name, ctt_faculty.phone)
