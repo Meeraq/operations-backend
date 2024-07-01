@@ -3487,7 +3487,9 @@ def create_sales_order(request):
                 sales_order.linkedin_profile = JSONString.get("linkedInProfile", "")
                 sales_order.background = JSONString.get("background", "")
                 sales_order.designation = JSONString.get("designation", "")
-                sales_order.companies_worked_in = JSONString.get("companies_worked_in", "")
+                sales_order.companies_worked_in = JSONString.get(
+                    "companies_worked_in", ""
+                )
                 sales_order.save()
 
             gm_sheet_id = request.data.get("gm_sheet", "")
@@ -5099,7 +5101,16 @@ def get_po_data_of_project(request, project_id, project_type):
         for expense in expenses:
             all_po_id.add(expense.purchase_order_id)
         total_sum = 0
-        purchase_orders = PurchaseOrder.objects.filter(purchaseorder_id__in=all_po_id)
+
+        if project_type == "skill_training":
+            purchase_orders = PurchaseOrder.objects.filter(
+                Q(purchaseorder_id__in=all_po_id) | Q(schedular_project__id=project_id)
+            ).distinct()
+        elif project_type == "CAAS":
+            purchase_orders = PurchaseOrder.objects.filter(
+                Q(purchaseorder_id__in=all_po_id) | Q(caas_project__id=project_id)
+            ).distinct()
+
         for purchase_order in purchase_orders:
             total_sum += purchase_order.total * purchase_order.exchange_rate
         purchase_orders_data = {"total_sum": total_sum}
@@ -5288,7 +5299,7 @@ def calculate_financials(project_id, project_type):
     gm_sheets = GmSheet.objects.filter(
         salesorder__in=[sales_order["id"] for sales_order in all_sales_orders]
     ).distinct()
-    expected_revenue, expected_cost = Decimal("0.0"), Decimal("0.0")
+    expected_revenue, expected_cost = 0, 0
     expected_currency = None
     expected_profitability = 0
 
