@@ -739,6 +739,11 @@ def get_all_finance(request):
                 if len(user_salesorders) > 0 and user_salesorders[0]
                 else ""
             )
+            designation =  (
+                user_salesorders[0].designation
+                if len(user_salesorders) > 0 and user_salesorders[0]
+                else ""
+            )
             currency_code = (
                 user_salesorders[0].currency_code if user_salesorders else None
             )
@@ -786,6 +791,7 @@ def get_all_finance(request):
                 "organisation": batch_user.user.current_organisation_name,
                 "certificate_status": certificate_status,
                 "background": background,
+                "designation": designation,
             }
             index += 1
             # assuming that the user is the salespersons user only if sales order exists
