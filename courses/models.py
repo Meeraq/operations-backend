@@ -426,6 +426,7 @@ class CttParticipantPerformanceEvaluation(models.Model):
         ("pending", "Pending"),
         ("pass", "Pass"),
         ("fail", "Fail"),
+        ("format_incorrect","Format Incorrect"),
     ]
 
     batch = models.IntegerField(blank=True, null=True)

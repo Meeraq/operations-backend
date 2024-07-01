@@ -868,7 +868,7 @@ def get_participants_of_that_batch(request, batch_id):
             payment_status = None
 
             background = salesorders.first().background if salesorders.first() else ""
-
+            designation =  salesorders.first().designation if salesorders.first() else ""
             performance_evaluation = salesorders.first().performance_evaluation if salesorders.first() else ""
 
             for sales_order in salesorders:
@@ -898,6 +898,7 @@ def get_participants_of_that_batch(request, batch_id):
                 "payment_status": payment_status,
                 "background": background,
                 "performance_evaluation":performance_evaluation,
+                "designation": designation,
             }
 
             index += 1
