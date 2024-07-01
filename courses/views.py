@@ -5028,10 +5028,12 @@ def release_ctt_certificates_multiple_participants(request):
                 configuration=pdfkit_config,
                 options={"orientation": "Landscape"},
             )
+            email_content = render_to_string("ctt_templates/ctt_certificate.html", content)
+
             # Send email with PDF attachment
             email = EmailMessage(
                 f"{env('EMAIL_SUBJECT_INITIAL',default='')} {batch_user.batch.program.name} Certificate",
-                (""),
+                email_content,
                 settings.DEFAULT_FROM_EMAIL,
                 (
                     batch_user.user.email
